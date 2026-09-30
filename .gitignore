@@ -1,0 +1,22 @@
+# 本地静态服务器不需要跟踪
+__pycache__/
+*.pyc
+
+# 视觉回归截图是每次跑测试重新生成的产物，不进版本库
+tests/shot-*.png
+
+# OCR 夹具与临时产物
+tests/*.tmp.js
+tests/.cand.tmp.js
+tests/_*
+tests/*.log
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+
+# 系统
+Thumbs.db
+.DS_Store
+desktop.ini

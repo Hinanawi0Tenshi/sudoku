@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>数独 · Sudoku Studio</title>
+<link rel="stylesheet" href="css/app.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔢</text></svg>">
+</head>
+<body>
+
+<!-- 启动页：所有入口都在这里，游戏页不再堆设置项 -->
+<section class="view view-home is-active" id="view-home">
+  <div class="home-card">
+    <div class="home-logo">9</div>
+    <h1 class="home-title">数独</h1>
+    <p class="home-sub">会出题、会讲解、会从图片里读题</p>
+    <nav class="home-menu">
+      <button class="home-item home-item-primary" data-go="play">
+        <span class="hi-label">开始数独</span>
+        <span class="hi-desc">按难度出一道新题</span>
+      </button>
+      <button class="home-item" data-go="bank">
+        <span class="hi-label">题库</span>
+        <span class="hi-desc">精选题目，随时秒开</span>
+      </button>
+      <button class="home-item" data-go="daily">
+        <span class="hi-label">每日挑战</span>
+        <span class="hi-desc" id="home-daily-desc">同一天全世界同一道题</span>
+      </button>
+      <button class="home-item" data-go="settings">
+        <span class="hi-label">设置</span>
+        <span class="hi-desc">主题、高亮、提示、笔记</span>
+      </button>
+      <button class="home-item" data-go="about">
+        <span class="hi-label">关于</span>
+        <span class="hi-desc">这个游戏是怎么做的</span>
+      </button>
+    </nav>
+    <p class="home-stats" id="home-stats"></p>
+  </div>
+  <div id="home-overlay" class="board-overlay" hidden></div>
+</section>
+
+<!-- 通用整页：设置 / 关于 / 题库详情共用，带返回 -->
+<section class="view view-page" id="view-page">
+  <header class="page-head">
+    <button class="btn page-back" id="page-back">‹ 返回</button>
+    <h2 class="page-title" id="page-title">设置</h2>
+  </header>
+  <div class="page-body" id="page-root"></div>
+</section>
+
+<!-- 游戏页 -->
+<section class="view view-game" id="view-game">
+<header class="topbar">
+  <button class="brand" id="btn-home" title="回到首页">
+    <span class="logo">9</span>
+    <span class="brand-text">数独<small>Sudoku Studio</small></span>
+  </button>
+
+  <div class="status-strip" id="status-strip">
+    <div class="stat"><span class="stat-label" id="stat-difficulty-label">难度</span><b id="stat-difficulty">—</b></div>
+    <div class="stat"><span class="stat-label">用时</span><b id="stat-timer" class="mono">00:00</b></div>
+    <div class="stat"><span class="stat-label">提示</span><b id="stat-hints">0</b></div>
+    <div class="stat"><span class="stat-label">错误</span><b id="stat-mistakes">0</b></div>
+    <div class="stat"><span class="stat-label">空格</span><b id="stat-empty">0</b></div>
+  </div>
+
+  <div class="topbar-actions">
+    <button class="btn" id="btn-undo" title="撤销 (Ctrl+Z)">撤销</button>
+    <button class="btn" id="btn-redo" title="重做 (Ctrl+Y)">重做</button>
+    <button class="btn btn-primary" id="btn-new" title="换一题 (N)">换一题</button>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="board-area">
+    <div class="puzzle-title" id="puzzle-title">自由练习</div>
+
+    <div class="board-wrap">
+      <div id="board-mount"></div>
+      <div id="board-overlay" class="board-overlay" hidden></div>
+    </div>
+
+    <div class="number-pad" id="number-pad">
+      <button class="np-digit" data-digit="1"><span>1</span></button>
+      <button class="np-digit" data-digit="2"><span>2</span></button>
+      <button class="np-digit" data-digit="3"><span>3</span></button>
+      <button class="np-digit" data-digit="4"><span>4</span></button>
+      <button class="np-digit" data-digit="5"><span>5</span></button>
+      <button class="np-digit" data-digit="6"><span>6</span></button>
+      <button class="np-digit" data-digit="7"><span>7</span></button>
+      <button class="np-digit" data-digit="8"><span>8</span></button>
+      <button class="np-digit" data-digit="9"><span>9</span></button>
+      <button class="np-erase" data-digit="0" title="擦除 (Delete / 空格)">⌫</button>
+    </div>
+
+    <div class="board-tools">
+      <button class="btn" id="btn-notes" title="铅笔标记 (N)"><span class="tool-ico">✎</span> 笔记</button>
+      <button class="btn" id="btn-hint" title="提示 (H)"><span class="tool-ico">💡</span> 提示</button>
+      <button class="btn" id="btn-check" title="检查 (C)"><span class="tool-ico">✓</span> 检查</button>
+      <button class="btn" id="btn-auto-notes" title="按当前盘面重算所有铅笔标记">一键笔记</button>
+      <button class="btn" id="btn-solve" class="btn-warn"><span class="tool-ico">⚡</span> 自动求解</button>
+    </div>
+  </section>
+
+  <aside class="side">
+    <nav class="tabs" role="tablist">
+      <button class="tab is-active" data-tab="hint" role="tab">提示</button>
+      <button class="tab" data-tab="learn" role="tab">技巧教学</button>
+      <button class="tab" data-tab="image" role="tab">图片识别</button>
+      <button class="tab" data-tab="data" role="tab">数据</button>
+    </nav>
+
+    <div class="tab-body">
+      <div class="panel is-active" data-panel="hint">
+        <div class="hint-toolbar">
+          <label class="field">
+            <span>提示等级上限</span>
+            <select id="hint-level"></select>
+          </label>
+        </div>
+        <div id="hint-output" class="hint-output"></div>
+        <div class="hint-actions">
+          <button class="btn" id="btn-hint-show">只讲解</button>
+          <button class="btn btn-primary" id="btn-hint-apply">讲解并执行</button>
+          <button class="btn" id="btn-hint-auto">自动做完</button>
+        </div>
+      </div>
+
+      <div class="panel" data-panel="learn">
+        <div class="learn-intro">当前局面可用的技巧会高亮显示。点开任意技巧，看它的原理、步骤与常见误区。</div>
+        <div id="available-techniques" class="tech-available"></div>
+        <div id="technique-library" class="tech-library"></div>
+      </div>
+
+      <div class="panel" data-panel="image">
+        <div id="ocr-root"></div>
+      </div>
+
+      <div class="panel" data-panel="data">
+        <div id="data-root"></div>
+      </div>
+    </div>
+  </aside>
+</main>
+</section>
+
+<div id="dialog-root"></div>
+<div id="toast-root" class="toast-root" aria-live="polite"></div>
+
+<script src="js/core/01-core.js"></script>
+<script src="js/core/02-board.js"></script>
+<script src="js/core/03-solver.js"></script>
+<script src="js/core/04-generator.js"></script>
+<script src="js/core/05-techniques.js"></script>
+<script src="js/core/06-hints.js"></script>
+<script src="js/core/07-rater.js"></script>
+<script src="js/core/08-bank.js"></script>
+<script src="js/vendor/tesseract/tesseract.min.js"></script>
+<script src="js/ui/10-dom.js"></script>
+<script src="js/ui/11-store.js"></script>
+<script src="js/ui/12-board-view.js"></script>
+<script src="js/ui/13-game.js"></script>
+<script src="js/ui/14-panels.js"></script>
+<script src="js/ui/15-data.js"></script>
+<script src="js/ui/16-settings.js"></script>
+<script src="js/ui/17-ocr-vision.js"></script>
+<script src="js/ui/18-ocr.js"></script>
+<script src="js/ui/19-app.js"></script>
+</body>
+</html>
