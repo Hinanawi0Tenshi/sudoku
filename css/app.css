@@ -1127,19 +1127,12 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
 
 /* 窄屏：顶栏状态条压成一行可横向滑动，横向空间优先给棋盘 */
 @media (max-width: 700px) {
-  /* 提示展开时上下分栏：棋盘缩到半屏以内，讲解占下半屏，两边都不用滚 */
-  .layout.is-split {
-    grid-template-rows: auto minmax(0, 1fr);
-    /* align-items: start 会让提示区无视行高、直接按内容高度撑开，必须改回 stretch */
-    align-items: stretch;
-  }
-  /* flex: none 是必须的——列方向里默认会被压扁，棋盘就缺了最后一行 */
-  .layout.is-split .board-wrap { width: min(100%, 30vh); margin: 0 auto; flex: none; }
-  /* 工具压成一行横滑，不然六个按钮占两行，讲解就被挤到屏外了 */
-  .layout.is-split .board-tools { display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-  .layout.is-split .board-tools::-webkit-scrollbar { display: none; }
-  .layout.is-split .board-tools .btn { flex: none; padding: 7px 10px; font-size: 12.5px; }
-  .layout.is-split .hint-area { max-height: none; min-height: 0; }
+  /* 提示展开时：棋盘保持原大小，功能栏整行收起，讲解接在数字键盘下面。
+     这里不再硬切半屏——顶栏 + 棋盘 + 数字键盘已经吃掉大半屏，
+     剩下的高度塞不下讲解，页面正常滚动反而更实在。 */
+  .layout.is-split { grid-template-rows: auto auto; }
+  .layout.is-split .board-tools { display: none; }
+  .layout.is-split .hint-area { max-height: 66vh; }
   .layout { padding: 12px 10px 20px; gap: 14px; }
   .topbar { padding: 8px 10px; gap: 8px; }
   .brand-text { display: none; }
@@ -1179,30 +1172,14 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
   }
   .board-tools .btn { font-size: 12.5px; padding: 9px 6px; }
 
-  /* 数字键盘是吸底的，分栏时提示区要给它让出位置，否则底部三个按钮点不到 */
-  .layout.is-split .hint-area { margin-bottom: calc(66px + env(safe-area-inset-bottom)); }
-  /* 单栏时棋盘区要躲开吸底的键盘；分栏后提示在键盘上方，那段留白纯属浪费 */
-  .layout.is-split .board-area { padding-bottom: 0; }
-
+  /* 数字键盘跟在棋盘下面，跟着功能栏一起走。
+     之前吸在屏幕底边，工具栏被留在半空，中间空出一大块，够不着也难看。 */
   .number-pad {
-    position: fixed;
-    left: 0; right: 0; bottom: 0;
-    z-index: 25;
-    width: 100%;
-    margin: 0;
+    width: min(100%, 620px);
     gap: 6px;
-    padding: 7px 8px calc(7px + env(safe-area-inset-bottom));
-    background: var(--surface);
-    border-top: 1px solid var(--border);
-    box-shadow: 0 -6px 18px rgba(16, 24, 40, .10);
   }
   .np-digit, .np-erase { padding: 12px 0; font-size: 19px; }
-
-  /* 给固定键盘让位，底下的内容别被盖住 */
-  .board-area { padding-bottom: calc(66px + env(safe-area-inset-bottom)); }
-  .layout { padding-bottom: 12px; }
-
-  .hint-actions { bottom: 0; position: sticky; }
+  .layout { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
 }
 
 @media (prefers-reduced-motion: reduce) {

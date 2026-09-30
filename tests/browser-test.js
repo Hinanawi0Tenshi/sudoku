@@ -450,8 +450,8 @@ async function main() {
     const st = SD.App.getGame().state;
     const overlayGone = document.getElementById('home-overlay').hidden;
     const isDaily = !!st.meta.dailyKey;
-    const title = (document.getElementById('puzzle-title').textContent || '');
-    return { ok: view === 'game' && overlayGone && isDaily,
+    const title = (SD.App.getGame().state.meta.title || '');
+    return { ok: view === 'game' && overlayGone && isDaily && title.indexOf('每日挑战') === 0,
              info: '视图=' + view + '，遮罩已收起=' + overlayGone + '，标题=' + title };
   })()`);
 

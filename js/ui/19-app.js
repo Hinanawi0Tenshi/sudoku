@@ -72,7 +72,6 @@
     let empty = 0;
     for (let i = 0; i < 81; i++) if (!st.board.grid[i]) empty++;
     $('#stat-empty').textContent = String(empty);
-    $('#puzzle-title').textContent = meta.title || meta.difficultyName || '自由练习';
   }
 
   /** 重算提示列表。盘面一变就必须重来，因为可用解法也跟着变 */
