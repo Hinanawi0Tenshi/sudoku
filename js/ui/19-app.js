@@ -138,9 +138,15 @@
     }
   }
 
-  function startWith(givens, meta, solution) {
+  /**
+   * @param {boolean} keepView 保持当前视图。冷启动会先在后台备好一局，
+   *   但玩家还站在首页，不能因为「备好了」就把他拽进游戏页。
+   */
+  function startWith(givens, meta, solution, keepView) {
     game.start(givens, meta, solution);
     game.clearHint();
+    // 入口可能从首页发起，不切视图就等于点了没反应
+    if (!keepView) showView('game');
     render();
     renderAllPanels();
     scheduleSave();
@@ -265,6 +271,10 @@
           dailyKey: seed,
           title: '每日挑战 · ' + seed.slice(6),
         }, gen.solution);
+      }, (e) => {
+        // 静默失败会让遮罩永远留在屏幕上，用户只看到点了一下没反应
+        hideOverlay();
+        toast('每日挑战出题失败：' + e.message, 'err');
       });
     }, 30);
   }
@@ -505,7 +515,7 @@
     }
   }
 
-  SD.App = { getGame: () => game, render: render, applyImported: applyImported, switchTab: switchTab, newGame: newGame, loadImported: loadImported, showView: showView, playBank: playBank, openPage: openPage };
+  SD.App = { getGame: () => game, render: render, applyImported: applyImported, switchTab: switchTab, newGame: newGame, loadImported: loadImported, showView: showView, playBank: playBank, openPage: openPage, startWith: startWith };
 
   /* ---------------- 事件接线与启动 ---------------- */
   /** 讲解里的【R2C6】指到哪一格，棋盘就点亮哪一格；触屏没有 hover，用长按代替 */
@@ -792,7 +802,10 @@
           clueCount: gen.clueCount,
           level: gen.level,
           title: gen.difficultyName + ' · ' + gen.clueCount + ' 个线索',
-        }, gen.solution);
+        }, gen.solution, true);
+      }, (e) => {
+        showView('home');
+        toast('开局出题失败：' + e.message, 'err');
       });
     } else {
       render();

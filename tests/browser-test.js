@@ -443,6 +443,44 @@ async function main() {
     }
     return { ok: true, info: out.join(' ') };
   })()`);
+
+  await step('从首页发起每日挑战会真的进到对局', `(async function(){
+    SD.App.showView('home');
+    await new Promise(res => setTimeout(res, 60));
+    document.querySelector('.home-item[data-go=daily]').click();
+    await new Promise(res => setTimeout(res, 150));
+    const btns = document.querySelectorAll('.modal-foot .btn');
+    btns[btns.length - 1].click();
+    // 出题要一两秒，轮询等它落地
+    for (let i = 0; i < 40; i++) {
+      await new Promise(res => setTimeout(res, 250));
+      if (document.documentElement.getAttribute('data-view') === 'game') break;
+    }
+    const view = document.documentElement.getAttribute('data-view');
+    const st = SD.App.getGame().state;
+    const overlayGone = document.getElementById('home-overlay').hidden;
+    const isDaily = !!st.meta.dailyKey;
+    const title = (document.getElementById('puzzle-title').textContent || '');
+    return { ok: view === 'game' && overlayGone && isDaily,
+             info: '视图=' + view + '，遮罩已收起=' + overlayGone + '，标题=' + title };
+  })()`);
+
+  await step('备局时不会把人拽出首页', `(async function(){
+    const fresh = SD.Generator.generateSync('easy', 'keep-view');
+    const meta = { difficultyName: '测试' };
+    // keepView 为真：冷启动在后台备好一局，玩家还站在别的页面上，不该被拽走
+    SD.App.showView('page');
+    SD.App.startWith(fresh.givens, meta, fresh.solution, true);
+    await new Promise(res => setTimeout(res, 60));
+    const kept = document.documentElement.getAttribute('data-view');
+    // 不带 keepView：从首页发起的开局必须切到游戏页，否则等于点了没反应
+    SD.App.showView('home');
+    SD.App.startWith(fresh.givens, meta, fresh.solution);
+    await new Promise(res => setTimeout(res, 60));
+    const jumped = document.documentElement.getAttribute('data-view');
+    return { ok: kept === 'page' && jumped === 'game',
+             info: 'keepView 时停在 ' + kept + '，正常开局切到 ' + jumped };
+  })()`);
   await step('每套主题的关键变量都定义齐全', `(function(){
     const need = ['--bg', '--surface', '--text', '--accent', '--box-line', '--box-tint'];
     const bad = [];
