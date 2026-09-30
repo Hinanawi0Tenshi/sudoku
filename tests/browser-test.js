@@ -509,6 +509,44 @@ async function main() {
     return { ok: cells.length >= 28 && trophies === 1 && done.length === 1 && rings.length >= 1 && untouched.length > 10,
              info: cells.length + ' 格，奖杯 ' + trophies + ' 顶，带进度 ' + rings.length + ' 格，空白 ' + untouched.length + ' 格，今天=' + (today ? today.querySelector('.cal-num').textContent : '无') };
   })()`);
+
+  await step('游戏页有回首页的入口且不再有换一题', `(async function(){
+    SD.App.showView('game');
+    await new Promise(r => setTimeout(r, 80));
+    const back = document.getElementById('btn-home-back');
+    const gone = !document.getElementById('btn-new');
+    const brand = document.getElementById('btn-home');
+    if (!back) return { ok: false, info: '顶栏没有返回按钮' };
+    back.click();
+    await new Promise(r => setTimeout(r, 120));
+    const view = document.documentElement.getAttribute('data-view');
+    return { ok: view === 'home' && gone && !!brand,
+             info: '返回按钮点击后视图=' + view + '，换一题已移除=' + gone + '，logo 可点=' + !!brand };
+  })()`);
+
+  await step('出题途中回首页不会卡在加载遮罩', `(async function(){
+    // 遮罩跟视图走会出岔子：出题在首页发起，生成完切到游戏页，
+    // 收起时按新视图去找就找错节点，灰幕留在首页点不掉
+    SD.App.showView('home');
+    await new Promise(r => setTimeout(r, 80));
+    document.querySelector('.home-item[data-go=play]').click();
+    await new Promise(r => setTimeout(r, 150));
+    const btn = document.querySelectorAll('#dialog-root .btn');
+    const diff = Array.from(btn).find((b) => b.dataset && b.dataset.difficulty);
+    if (diff) diff.click();
+    await new Promise(r => setTimeout(r, 120));
+    const shownNow = !document.getElementById('home-overlay').hidden;
+    // 立刻回首页
+    document.getElementById('btn-home-back').click();
+    for (let i = 0; i < 40; i++) {
+      await new Promise(r => setTimeout(r, 250));
+      if (document.getElementById('home-overlay').hidden && document.getElementById('board-overlay').hidden) break;
+    }
+    const homeClear = document.getElementById('home-overlay').hidden;
+    const boardClear = document.getElementById('board-overlay').hidden;
+    return { ok: homeClear && boardClear,
+             info: '出题时遮罩已显示=' + shownNow + '，回首页后 首页遮罩收起=' + homeClear + ' 棋盘遮罩收起=' + boardClear };
+  })()`);
   await step('备局时不会把人拽出首页', `(async function(){
     const fresh = SD.Generator.generateSync('easy', 'keep-view');
     const meta = { difficultyName: '测试' };

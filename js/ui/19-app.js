@@ -195,8 +195,13 @@
   // 盖在隐藏的棋盘上等于什么都没发生。
   const overlayOf = () => (document.documentElement.getAttribute('data-view') === 'home' ? $('#home-overlay') : $('#board-overlay'));
 
+  // 记下 show 时落在哪个节点上。出题是异步的，中间很可能已经切了视图，
+  // 收起时再按当前视图去找就会收错地方，遮罩就永远留在屏幕上。
+  let shownOverlay = null;
+
   function showOverlay(title, sub) {
     const ov = overlayOf();
+    shownOverlay = ov;
     clear(ov);
     ov.hidden = false;
     ov.appendChild(el('div.ov-card', null, [
@@ -206,11 +211,13 @@
     ]));
   }
 
-  const hideOverlay = () => {
-    const ov = overlayOf();
-    ov.hidden = true;
-    clear(ov);
-  };
+  function hideOverlay() {
+    if (!shownOverlay) return;
+    shownOverlay.hidden = true;
+    clear(shownOverlay);
+    shownOverlay = null;
+  }
+
 
   /* ---------------- 新局对话框 ---------------- */
   const DIFF_DESC = {
@@ -281,6 +288,16 @@
       renderAllPanels();
     }
     if (name === 'home') renderHome();
+    // 切视图时两个遮罩都收干净。遮罩是出题期间的临时状态，跟着视图走就会出岔子：
+    // 出题途中回首页，收起时按新视图去找就找错了节点，灰幕留在屏幕上点不掉。
+    hideOverlay();
+    for (const id of ['#home-overlay', '#board-overlay']) {
+      const ov = $(id);
+      if (ov) {
+        ov.hidden = true;
+        clear(ov);
+      }
+    }
     window.scrollTo(0, 0);
   }
 
@@ -560,7 +577,7 @@
       root.appendChild(card);
     }
     root.appendChild(
-      el('p.foot-note', { text: '快捷键：N 换一题 · M 笔记 · H 提示 · C 检查 · D 每日挑战 · Ctrl+Z 撤销 · Ctrl+Y 重做' })
+    el('p.foot-note', { text: '快捷键：Esc 回首页 · M 笔记 · H 提示 · C 检查 · D 每日挑战 · Ctrl+Z 撤销 · Ctrl+Y 重做' })
     );
   }
   function applyImported(text, json, extra) {
@@ -673,10 +690,10 @@
     out.addEventListener('touchcancel', end, { passive: true });
   }
   function bindEvents() {
-    $('#btn-new').addEventListener('click', openNewGameDialog);
     $('#btn-undo').addEventListener('click', () => { game.undo(); render(); scheduleSave(); });
     $('#btn-redo').addEventListener('click', () => { game.redo(); render(); scheduleSave(); });
     $('#btn-home').addEventListener('click', () => showView('home'));
+    $('#btn-home-back').addEventListener('click', () => showView('home'));
     U.$$('.home-item').forEach((b) => b.addEventListener('click', () => handleHome(b.dataset.go)));
     $('#page-back').addEventListener('click', () => showView('home'));
     $('#btn-notes').addEventListener('click', () => { game.setNoteMode(); render(); });
@@ -797,6 +814,12 @@
   }
 
   function onKeyDown(e) {
+    // 弹窗开着时 Esc 归弹窗管，否则关掉弹窗的同时还会把当前视图切走
+    if (e.key === 'Escape' && !document.querySelector('#dialog-root .modal')) {
+      e.preventDefault();
+      showView('home');
+      return;
+    }
     if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
     const st = game.state;
     const mod = e.ctrlKey || e.metaKey;
@@ -839,11 +862,6 @@
         e.preventDefault();
         calMonth = null;
         openPage('每日挑战', openDailyPage);
-        break;
-      case 'n':
-      case 'N':
-        e.preventDefault();
-        openNewGameDialog();
         break;
       case 'm':
       case 'M':

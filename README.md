@@ -40,7 +40,7 @@
 游戏页只剩棋盘和工具。点「提示」后棋盘与讲解各占一半，技巧教学点按钮弹出；
 设置项一个都不留在盘面上方——那是设置该待的地方。点左上角的 logo 回首页。
 
-快捷键：`N` 换一题 · `M` 笔记 · `H` 提示 · `C` 检查 · `D` 每日挑战 · `Ctrl+Z` 撤销 · `Ctrl+Y` 重做
+快捷键：`Esc` 回首页 · `M` 笔记 · `H` 提示 · `C` 检查 · `D` 每日挑战 · `Ctrl+Z` 撤销 · `Ctrl+Y` 重做
 
 ---
 
@@ -248,7 +248,7 @@ Tesseract 会把相邻的数字合并成一个 word，按词中心定位必然�
 
 | 键 | 作用 |
 |---|---|
-| `N` | 换一题（弹难度选择） |
+| `Esc` | 回首页（要换题从这里走） |
 | `M` | 铅笔标记开关 |
 | `H` | 取一条提示（只讲解） |
 | `C` | 检查全盘冲突与错数 |
@@ -265,7 +265,7 @@ Tesseract 会把相邻的数字合并成一个 word，按词中心定位必然�
 ```powershell
 node tests/run-core-tests.js   # 核心逻辑 73 项断言，纯 Node
 node tests/detect-test.js      # 网格自动定位的 7 个场景
-node tests/browser-test.js     # 真实浏览器冒烟 39 项，需要本地服务在线
+node tests/browser-test.js     # 真实浏览器冒烟 41 项，需要本地服务在线
 node tests/ocr-test.js         # 图片识别端到端
 node tests/screenshot.js       # 视觉回归截图
 ```
