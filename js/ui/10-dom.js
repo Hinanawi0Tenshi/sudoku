@@ -23,7 +23,13 @@
         if (v === null || v === undefined || v === false) continue;
         if (k === 'text') node.textContent = v;
         else if (k === 'html') node.innerHTML = v;
-        else if (k === 'style' && typeof v === 'object') Object.assign(node.style, v);
+        else if (k === 'style' && typeof v === 'object') {
+          for (const prop of Object.keys(v)) {
+            // Object.assign 设不了 --自定义属性，必须走 setProperty
+            if (prop.charAt(0) === '-' && prop.charAt(1) === '-') node.style.setProperty(prop, v[prop]);
+            else node.style[prop] = v[prop];
+          }
+        }
         else if (k.slice(0, 2) === 'on' && typeof v === 'function') node.addEventListener(k.slice(2), v);
         else if (k === 'dataset') Object.assign(node.dataset, v);
         else node.setAttribute(k, v === true ? '' : v);

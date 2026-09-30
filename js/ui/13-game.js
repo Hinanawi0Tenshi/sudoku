@@ -122,9 +122,18 @@
       return true;
     }
 
+    /* ---------------- 通知 ---------------- */
+    function emit(kind) {
+      if (h.onChange) h.onChange(kind, st);
+    }
+
     /* ---------------- 冲突与完成 ---------------- */
     const conflicts = () => SD.Validation.findConflicts(st.board.grid);
 
+    /**
+     * 胜利判定。播报放在这里而不是各个调用点：
+     * 盘面可能被手动落子、提示执行、自动求解三条路填满，少一条就等于白填。
+     */
     function checkWin() {
       if (st.won) return false;
       if (!SD.Validation.isComplete(st.board.grid)) return false;
@@ -132,6 +141,7 @@
       st.won = true;
       pauseTimer();
       st.board.locked.fill(1);
+      emit('win');
       return true;
     }
 
@@ -156,9 +166,9 @@
         else st.board.rebuildNotes();
       }
 
-      const justWon = checkWin();
-      emit(justWon ? 'win' : 'move');
-      return justWon;
+      checkWin();
+      emit('move');
+      return false;
     }
 
     /* ---------------- 输入 ---------------- */
@@ -185,9 +195,9 @@
       const before = snapshot();
       if (!st.board.setValue(i, d)) return false;
       startTimer();
-      const won = afterMove(i);
+      // 候选同步已经在 afterMove 里做过了，这里不再重复一遍
+      afterMove(i);
       commitHistory(before);
-      if (!won && cfg.autoNotes && st.board.grid[i]) st.board.propagateNotes(i);
       return true;
     }
 

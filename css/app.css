@@ -357,6 +357,78 @@ body {
 }
 .bi-meta { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
 .bi-note { font-size: 12.5px; color: var(--text-dim); line-height: 1.5; }
+
+/* ---------------- 每日挑战日历 ---------------- */
+.cal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin: 18px 0 10px;
+}
+.cal-title { font-size: 15px; font-weight: 650; }
+.cal-head .btn-icon { width: 38px; height: 34px; font-size: 17px; }
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+.cal-wd {
+  text-align: center;
+  font-size: 11.5px; color: var(--text-faint);
+  padding-bottom: 2px;
+}
+
+/* 日期格：用 conic-gradient 在四周画进度环，--p 是完成百分比 */
+.cal-day {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  display: grid; place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-dim);
+  font: inherit; font-size: 13.5px;
+  cursor: pointer;
+  transition: border-color .14s, background .14s, transform .08s;
+}
+.cal-day::before {
+  content: "";
+  position: absolute; inset: -2px;
+  border-radius: inherit;
+  padding: 4px;
+  background: conic-gradient(var(--accent) var(--p, 0%), var(--border) 0);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity .16s;
+  pointer-events: none;
+}
+.cal-day:not(.is-future):hover { border-color: var(--accent); }
+.cal-day:active { transform: translateY(1px); }
+.cal-day.is-future { opacity: .35; cursor: default; }
+.cal-day.is-today {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+/* 只要有进度就把环画出来，否则「做了一半」的格子看起来和空白没区别 */
+.cal-day.has-ring::before { opacity: 1; }
+.cal-day.is-today::before { opacity: 1; }
+.cal-day.is-won {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  cursor: default;
+}
+.cal-day.is-won::before { opacity: 1; }
+.cal-trophy {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  font-size: 17px;
+  line-height: 1;
+}
+.cal-day.is-won .cal-num { opacity: 0; }
 .about-card p { line-height: 1.75; }
 /* ---------------- 顶栏 ---------------- */
 .topbar {

@@ -164,6 +164,11 @@
       elapsed: game.elapsedMs(),
       techniques: st.techniques,
     });
+    if (st.meta.dailyKey && !st.won) {
+      let filled = 0;
+      for (let i = 0; i < 81; i++) if (st.board.grid[i]) filled++;
+      SD.Store.recordDailyProgress(st.meta.dailyKey, filled, 81);
+    }
   }, 400);
 
   /* ---------------- 遮罩 ---------------- */
@@ -220,43 +225,6 @@
     });
   }
 
-  /** 每日挑战入口：把战绩摊开摆给用户看，而不是只藏在数据面板里 */
-  function openDailyDialog() {
-    const d = SD.Store.dailyStats();
-    const rec = d.record;
-    const stats2 = el('div.daily-stats');
-    const add = (label, value, hint) =>
-      stats2.appendChild(el('div.daily-stat', null, [
-        el('span.ds-label', { text: label }),
-        el('b.ds-value', { text: value }),
-        hint ? el('small', { text: hint }) : null,
-      ]));
-
-    add('今日', d.date, '所有人拿到的是同一道题');
-    add('状态', d.done ? '已完成' : '待挑战', d.done ? '想再玩一遍可以直接重开' : '做完才算完成');
-    if (d.done && rec.timeMs) add('今日用时', B.formatDuration(rec.timeMs), '提示 ' + rec.tries + ' 次');
-    add('连续', d.streak + ' 天', d.streak >= 3 ? '保持住' : '连续完成会自动累计');
-    add('最好成绩', d.bestTimeMs ? B.formatDuration(d.bestTimeMs) : '—', '共完成 ' + d.total + ' 天');
-
-    const m = modal({
-      title: '每日挑战',
-      body: [
-        el('p', { text: '题目由当天日期作种子生成——同一天全世界拿到的是同一道题，做完记一次成绩。' }),
-        stats2,
-      ],
-      footer: [
-        { label: '关闭' },
-        {
-          label: d.done ? '再玩一次' : '开始挑战',
-          primary: true,
-          onClick: () => {
-            m.close();
-            dailyChallenge(SD.Generator.dailySeed());
-          },
-        },
-      ],
-    });
-  }
   function dailyChallenge(seed) {
     showOverlay('正在生成每日挑战…', '同一天全球拿到的是同一道题。');
     setTimeout(() => {
@@ -310,7 +278,7 @@
   function handleHome(go) {
     if (go === 'play') { openNewGameDialog(); return; }
     if (go === 'bank') { openPage('题库', openBankPage); return; }
-    if (go === 'daily') { openDailyDialog(); return; }
+    if (go === 'daily') { calMonth = null; openPage('每日挑战', openDailyPage); return; }
     if (go === 'settings') { openPage('设置', (root) => SD.Settings.renderSettings(root, settingsCtx())); return; }
     if (go === 'about') { openPage('关于', openAboutPage); return; }
   }
@@ -363,6 +331,108 @@
       showView('game');
     }
   }
+  /* ---------------- 每日挑战日历 ---------------- */
+  let calMonth = null;   // null 表示跟随当前月
+
+  const monthKey = (d) => d.getFullYear() + '-' + B.pad2(d.getMonth() + 1);
+
+  function openDailyPage(root) {
+    const stats = SD.Store.dailyStats();
+
+    const summary = el('div.daily-stats');
+    const add = (label, value, hint) =>
+      summary.appendChild(el('div.daily-stat', null, [
+        el('span.ds-label', { text: label }),
+        el('b.ds-value', { text: value }),
+        hint ? el('small', { text: hint }) : null,
+      ]));
+    add('今日', stats.date, '同一天全世界同一道题');
+    add('连续', stats.streak + ' 天', stats.streak >= 3 ? '保持住' : '连续完成会自动累计');
+    add('最好成绩', stats.bestTimeMs ? B.formatDuration(stats.bestTimeMs) : '—', '共完成 ' + stats.total + ' 天');
+    root.appendChild(summary);
+    const today = new Date();
+    const cursor = calMonth
+      ? new Date(calMonth + '-01T00:00:00')
+      : new Date(today.getFullYear(), today.getMonth(), 1);
+
+    const head = el('div.cal-head', null, [
+      el('button.btn.btn-icon', {
+        text: '‹',
+        title: '上个月',
+        onclick: () => { calMonth = shiftMonth(cursor, -1); openPage('每日挑战', openDailyPage); },
+      }),
+      el('b.cal-title', { text: cursor.getFullYear() + ' 年 ' + (cursor.getMonth() + 1) + ' 月' }),
+      el('button.btn.btn-icon', {
+        text: '›',
+        title: '下个月',
+        onclick: () => { calMonth = shiftMonth(cursor, 1); openPage('每日挑战', openDailyPage); },
+      }),
+    ]);
+    root.appendChild(head);
+
+    const grid = el('div.cal-grid');
+    for (const w of ['日', '一', '二', '三', '四', '五', '六']) grid.appendChild(el('div.cal-wd', { text: w }));
+
+    // 先补上前一个月的尾巴，让每一行都从周日开始
+    const lead = cursor.getDay();
+    for (let i = lead - 1; i >= 0; i--) {
+      grid.appendChild(calCell(new Date(cursor.getFullYear(), cursor.getMonth(), -i), today));
+    }
+    const days = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate();
+    for (let i = 1; i <= days; i++) {
+      grid.appendChild(calCell(new Date(cursor.getFullYear(), cursor.getMonth(), i), today));
+    }
+    const tail = (7 - ((lead + days) % 7)) % 7;
+    for (let i = 1; i <= tail; i++) {
+      grid.appendChild(calCell(new Date(cursor.getFullYear(), cursor.getMonth() + days + i), today));
+    }
+    root.appendChild(grid);
+
+    root.appendChild(el('p.foot-note', { text: '🏆 已完成 · 环的长度与底色深浅都是完成进度 · 空白是还没开始' }));
+    root.appendChild(
+      el('div.btn-row', null, [
+        el('button.btn.btn-primary', {
+          text: stats.done ? '今天已完成，再玩一次' : '开始今天的挑战',
+          onclick: () => dailyChallenge(SD.Generator.dailySeed()),
+        }),
+      ])
+    );
+  }
+
+  function shiftMonth(d, delta) {
+    return monthKey(new Date(d.getFullYear(), d.getMonth() + delta, 1));
+  }
+  /** 一天一格：完成了盖奖杯，做了一半画进度环，没碰过就干干净净 */
+  function calCell(d, today) {
+    const key = SD.Generator.dailySeed(d);
+    const rec = SD.Store.stats().daily[key];
+    const won = !!(rec && rec.won);
+    const filled = rec ? rec.filled || 0 : 0;
+    const total = rec && rec.total ? rec.total : 81;
+    const ratio = won ? 1 : Math.max(0, Math.min(1, filled / total));
+    const isToday = key === SD.Generator.dailySeed(today);
+    const future = d.getTime() > today.getTime() + 86400000;
+
+    // el() 的类名语法是 div.card.is-on，类之间用点号而不是空格
+    let cls = 'button.cal-day';
+    if (isToday) cls += '.is-today';
+    if (ratio > 0) cls += '.has-ring';
+    if (won) cls += '.is-won';
+    if (future) cls += '.is-future';
+
+    const cell = el(cls, {
+      style: ratio > 0
+        ? { '--p': Math.round(ratio * 100) + '%', background: 'color-mix(in srgb, var(--accent) ' + Math.round(ratio * 22) + '%, var(--surface))' }
+        : null,
+      title: won ? '已完成' : ratio > 0 ? '已完成 ' + Math.round(ratio * 100) + '%' : '',
+      onclick: won || future ? null : () => dailyChallenge(SD.Generator.dailySeed(d)),
+    }, [
+      el('span.cal-num', { text: String(d.getDate()) }),
+      won ? el('span.cal-trophy', { text: '🏆' }) : null,
+    ]);
+    return cell;
+  }
+
   /* ---------------- 关于页 ---------------- */
   const ABOUT = [
     {
@@ -709,7 +779,8 @@
       case 'd':
       case 'D':
         e.preventDefault();
-        openDailyDialog();
+        calMonth = null;
+        openPage('每日挑战', openDailyPage);
         break;
       case 'n':
       case 'N':

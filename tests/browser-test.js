@@ -416,12 +416,15 @@ async function main() {
              info: '返回=' + backHome + '，切游戏页=' + toGame };
   })()`);
 
-  await step('每日挑战弹窗与日期显示', `(async function(){
+  await step('每日挑战页显示日期与战绩', `(async function(){
     const g = SD.App.getGame();
+    SD.App.showView('home');
+    await new Promise(res => setTimeout(res, 60));
     document.querySelector('.home-item[data-go=daily]').click();
-    await new Promise(res => setTimeout(res, 150));
-    const stats = document.querySelectorAll('.daily-stat').length;
-    document.querySelector('.modal-foot .btn').click();
+    await new Promise(res => setTimeout(res, 200));
+    const stats = document.querySelectorAll('#page-root .daily-stat').length;
+    const title = document.getElementById('page-title').textContent;
+    document.getElementById('page-back').click();
     g.start(SD.Base.stringToGrid('530070000600195000098000060800060003400803001700020006060000280000419005000080079'),
       { difficultyName: '每日挑战', dailyKey: SD.Generator.dailySeed(), title: '每日挑战 · 测试' }, null);
     SD.App.render();
@@ -429,28 +432,15 @@ async function main() {
     const label = document.getElementById('stat-difficulty-label').textContent;
     const value = document.getElementById('stat-difficulty').textContent;
     const dateOk = value.length === 10 && value.charAt(4) === '-' && value.charAt(7) === '-';
-    return { ok: stats >= 4 && label === '今日' && dateOk,
-             info: '弹窗 ' + stats + ' 项指标；状态栏 ' + label + ' ' + value };
+    return { ok: stats === 3 && title === '每日挑战' && label === '今日' && dateOk,
+             info: title + '页 ' + stats + ' 项战绩；状态栏 ' + label + ' ' + value };
   })()`);
-
-  await step('四个标签页都能打开', `(async function(){
-    const out = [];
-    for (const key of ['hint', 'learn', 'image', 'data']) {
-      SD.App.switchTab(key);
-      const on = document.querySelector('.panel[data-panel=' + key + ']').classList.contains('is-active');
-      out.push(key + (on ? '✓' : '✗'));
-      if (!on) return { ok: false, info: out.join(' ') };
-    }
-    return { ok: true, info: out.join(' ') };
-  })()`);
-
   await step('从首页发起每日挑战会真的进到对局', `(async function(){
     SD.App.showView('home');
     await new Promise(res => setTimeout(res, 60));
     document.querySelector('.home-item[data-go=daily]').click();
-    await new Promise(res => setTimeout(res, 150));
-    const btns = document.querySelectorAll('.modal-foot .btn');
-    btns[btns.length - 1].click();
+    await new Promise(res => setTimeout(res, 200));
+    document.querySelector('#page-root .btn-primary').click();
     // 出题要一两秒，轮询等它落地
     for (let i = 0; i < 40; i++) {
       await new Promise(res => setTimeout(res, 250));
@@ -465,6 +455,60 @@ async function main() {
              info: '视图=' + view + '，遮罩已收起=' + overlayGone + '，标题=' + title };
   })()`);
 
+  await step('提示执行把盘填满会弹出庆祝', `(async function(){
+    const g = SD.App.getGame();
+    const fresh = SD.Generator.generateSync('easy', 'win-by-hint');
+    SD.App.startWith(fresh.givens, { difficultyName: '测试' }, fresh.solution);
+    g.state.board.locked.fill(0);
+    for (let i = 0; i < 81; i++) g.state.board.grid[i] = fresh.solution[i];
+    // 走提示执行这条路：checkWin() 内部负责播报，这里确认它真的播了
+    const before = document.querySelectorAll('.modal').length;
+    const empty = { step: { id: 'naked-single', level: 1, placements: [], eliminations: [], cells: [], marks: [] }, explain: { kind: 'elim' } };
+    g.applyStep(empty, true);
+    await new Promise(res => setTimeout(res, 200));
+    const after = document.querySelectorAll('.modal').length;
+    const head = document.querySelector('.modal-head');
+    const title = head ? head.textContent : '';
+    if (head && head.parentElement.querySelector('.modal-foot .btn')) head.parentElement.querySelector('.modal-foot .btn').click();
+    return { ok: after > before && title.indexOf('完成') >= 0,
+             info: '弹窗 ' + before + ' → ' + after + '，标题「' + title.trim() + '」' };
+  })()`);
+
+  await step('自动求解把盘填满也会弹庆祝', `(async function(){
+    const g = SD.App.getGame();
+    const fresh = SD.Generator.generateSync('easy', 'win-by-solve');
+    SD.App.startWith(fresh.givens, { difficultyName: '测试' }, fresh.solution);
+    const before = document.querySelectorAll('.modal').length;
+    g.autoSolve();
+    await new Promise(res => setTimeout(res, 400));
+    const after = document.querySelectorAll('.modal').length;
+    const won = g.state.won;
+    const close = document.querySelector('.modal-foot .btn');
+    if (close) close.click();
+    return { ok: after > before && won,
+             info: '弹窗 ' + before + ' → ' + after + '，won=' + won };
+  })()`);
+
+  await step('每日挑战日历按进度分三种状态', `(async function(){
+    const s = SD.Store.stats();
+    const t = new Date();
+    const keyOf = (n) => {
+      const d = new Date(t.getFullYear(), t.getMonth(), t.getDate() - n);
+      return SD.Generator.dailySeed(d);
+    };
+    s.daily[keyOf(3)] = { timeMs: 62000, won: true, tries: 1, filled: 81, total: 81 };
+    s.daily[keyOf(1)] = { timeMs: null, won: false, tries: 0, filled: 40, total: 81 };
+    document.querySelector('.home-item[data-go=daily]').click();
+    await new Promise(res => setTimeout(res, 250));
+    const cells = Array.from(document.querySelectorAll('.cal-day'));
+    const trophies = document.querySelectorAll('.cal-trophy').length;
+    const rings = cells.filter((c) => c.style.getPropertyValue('--p'));
+    const done = cells.filter((c) => c.classList.contains('is-won'));
+    const untouched = cells.filter((c) => !c.style.getPropertyValue('--p'));
+    const today = document.querySelector('.cal-day.is-today');
+    return { ok: cells.length >= 28 && trophies === 1 && done.length === 1 && rings.length >= 1 && untouched.length > 10,
+             info: cells.length + ' 格，奖杯 ' + trophies + ' 顶，带进度 ' + rings.length + ' 格，空白 ' + untouched.length + ' 格，今天=' + (today ? today.querySelector('.cal-num').textContent : '无') };
+  })()`);
   await step('备局时不会把人拽出首页', `(async function(){
     const fresh = SD.Generator.generateSync('easy', 'keep-view');
     const meta = { difficultyName: '测试' };

@@ -64,9 +64,25 @@ const WAIT_READY = [
   '}, 200);',
 ].join('');
 
+// 造几条历史，好让日历同时有奖杯、进度环和空白三种状态
+const DAILY_SEED = [
+  '(function(){',
+  '  var s = SD.Store.stats(), t = new Date();',
+  '  function k(n){ var d = new Date(t.getFullYear(), t.getMonth(), t.getDate() - n); return SD.Generator.dailySeed(d); }',
+  '  s.daily[k(5)] = { timeMs: 54000, won: true, tries: 1, filled: 81, total: 81 };',
+  '  s.daily[k(4)] = { timeMs: 88000, won: true, tries: 2, filled: 81, total: 81 };',
+  '  s.daily[k(3)] = { timeMs: null, won: false, tries: 0, filled: 62, total: 81 };',
+  '  s.daily[k(2)] = { timeMs: 71000, won: true, tries: 1, filled: 81, total: 81 };',
+  '  s.daily[k(1)] = { timeMs: null, won: false, tries: 0, filled: 28, total: 81 };',
+  '  s.daily[k(0)] = { timeMs: null, won: false, tries: 0, filled: 9, total: 81 };',
+  '  SD.Store.saveGame(SD.Store.loadGame() || {});',
+  "  document.querySelector('.home-item[data-go=daily]').click();",
+  '})()',
+].join('');
 const SCENES = [
   { name: 'shot-home.png', w: 1400, h: 940, setup: '' },
   { name: 'shot-bank.png', w: 1400, h: 940, setup: "document.querySelector('.home-item[data-go=bank]').click();" },
+  { name: 'shot-calendar.png', w: 1400, h: 940, setup: DAILY_SEED },
   { name: 'shot-about.png', w: 1400, h: 940, setup: "document.querySelector('.home-item[data-go=about]').click();" },
   { name: 'shot-settings.png', w: 1400, h: 940, setup: "document.documentElement.setAttribute('data-theme','forest'); document.querySelector('.home-item[data-go=settings]').click();" },
   { name: 'shot-game.png', w: 1400, h: 940, setup: WAIT_READY + "SD.App.showView('game');" },
@@ -77,5 +93,10 @@ const SCENES = [
 ];
 
 (async () => {
-  for (const s of SCENES) await shotFor(s.name, s.w, s.h, s.setup || null);
+  // 可传第二个参数只截某几张：node tests/screenshot.js http://... calendar
+  const only = process.argv[3];
+  for (const s of SCENES) {
+    if (only && !s.name.includes(only)) continue;
+    await shotFor(s.name, s.w, s.h, s.setup || null);
+  }
 })().catch((e) => { console.error(e); process.exit(1); });

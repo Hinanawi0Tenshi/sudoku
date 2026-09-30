@@ -114,6 +114,18 @@
     save();
   }
 
+  /**
+   * 记下每日挑战的当前进度，让日历能画出进度环。
+   * 落子时随手写一条，所以按天攒下来比只存当前这一局有用得多。
+   */
+  function recordDailyProgress(dailyKey, filled, total) {
+    if (!dailyKey || !total) return;
+    const rec = state.stats.daily[dailyKey] || (state.stats.daily[dailyKey] = { timeMs: null, won: false, tries: 0 });
+    if (rec.won) return;
+    rec.filled = filled;
+    rec.total = total;
+    save();
+  }
   function recordTechnique(id) {
     state.stats.techniqueUse[id] = (state.stats.techniqueUse[id] || 0) + 1;
     save();
@@ -174,6 +186,7 @@
     recordGame: recordGame,
     recordTechnique: recordTechnique,
     dailyStats: dailyStats,
+    recordDailyProgress: recordDailyProgress,
     resetStats: resetStats,
     resetSettings: resetSettings,
     resetAll: resetAll,
