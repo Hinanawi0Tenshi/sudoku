@@ -211,6 +211,9 @@ node tests/ocr-test.js
 
 # 5. 视觉回归截图
 node tests/screenshot.js
+
+# 6. 线上部署校验（发布完跑一遍）
+node tests/verify-live.js
 ```
 
 2、4、5 需要 Edge/Chrome 和一个跑着的本地服务（双击 `启动数独.cmd` 即可）。
@@ -219,6 +222,52 @@ node tests/screenshot.js
 核心引擎测试里最重要的是一条**性质测试**：从随机局面上把每一种技巧跑一遍，
 要求它给出的每一个落子和每一个候选消除，都必须和机器求解出的真实答案一致。
 只要有一条推理推错，测试立刻失败。这比逐个技巧写用例更能防回归。
+
+---
+
+## 部署上线
+
+线上地址：**https://sudoku-studio.app.workbuddy.host/**
+应用名「数独工作台」，locator 记在 `.workbuddy/applications.yaml`。
+
+纯静态站，平台自带 HTTP 服务，`serve.py` 只是给你本地双击用的，部署用不上。
+同一个目录重新发布就是**原地覆盖**，链接不变，之前分享出去的地址继续有效。
+
+改完代码后发布，然后**跑一遍校验**——不要拿"发布成功"当结论：
+
+```powershell
+node tests/verify-live.js
+```
+
+它把 index.html / css / js 逐个下载回来比对 md5（含 20M 的 OCR 资源），
+输出「一致 27/27」且退出码 0 才算真的生效。
+
+两个坑记在这里：
+
+- **手工核对必须带时间戳**。边缘节点会缓存，刚发完立刻 `curl` 拿到的是旧文件，
+  md5 对不上，看着像发布失败，其实文件已经上去了：
+  ```bash
+  curl -L "https://sudoku-studio.app.workbuddy.host/js/ui/14-panels.js?t=$(date +%s)"
+  ```
+- **别把站点挪到子目录**。`js/ui/18-ocr.js` 里 `VENDOR = 'js/vendor/'` 是相对路径，
+  部署位置必须和 `index.html` 同级，否则图片识别的 worker 和语言包全部 404。
+
+### 哪些东西会公开
+
+发布是把整个目录传上去（只排除 `.git/`、`node_modules/`、构建产物），
+实测下面前几项在公网可以直接访问：
+
+| 路径 | 状态 |
+|---|---|
+| `.workbuddy/memory/`、`.workbuddy/skills/` | 公开（工作笔记、技能文档都会被人读到）|
+| `tests/`（测试脚本、截图） | 公开 |
+| `README.md`、`serve.py` | 公开 |
+| `.git/` | 403，取不到 |
+
+所以**别往这个项目里写密钥、token 或未公开的素材**，包括 `.workbuddy/` 里的记忆文件。
+
+给负责写代码的 agent 看的完整操作手册在 `.workbuddy/skills/sudoku-deploy/SKILL.md`，
+里面有发布参数、同意规则和完整的踩坑清单。
 
 ---
 
@@ -265,9 +314,10 @@ Tesseract 会把相邻的数字合并成一个 word，按词中心定位必然�
 ```powershell
 node tests/run-core-tests.js   # 核心逻辑 73 项断言，纯 Node
 node tests/detect-test.js      # 网格自动定位的 7 个场景
-node tests/browser-test.js     # 真实浏览器冒烟 42 项，需要本地服务在线
+node tests/browser-test.js     # 真实浏览器冒烟 43 项，需要本地服务在线
 node tests/ocr-test.js         # 图片识别端到端
 node tests/screenshot.js       # 视觉回归截图
+node tests/verify-live.js      # 线上部署校验，纯 Node，发布后跑
 ```
 
 浏览器测试用 Node 22 自带的 WebSocket 直连 Chrome DevTools 协议，没有 npm 依赖。

@@ -108,6 +108,12 @@
     root.appendChild(strip);
 
     root.appendChild(buildCard(list[index].explain));
+
+    // 换一条解法就等于换了一篇讲解：正文要回到开头，否则停在上一篇的半截上，
+    // 技巧条也要把当前这条滚进可视范围——它现在是横滑的一行，选中的可能在屏外
+    root.scrollTop = 0;
+    const on = strip.querySelector('.hint-chip.is-on');
+    if (on) strip.scrollLeft = on.offsetLeft - (strip.clientWidth - on.offsetWidth) / 2;
   }
   /* ---------------- 技巧百科 ---------------- */
   function renderAvailable(root, grid) {

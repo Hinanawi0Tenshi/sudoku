@@ -578,6 +578,33 @@ async function main() {
   })()`);
   await send('Emulation.clearDeviceMetricsOverride');
   await sleep(300);
+  await step('换一条解法，正文回到开头且技巧条露出当前那条', `(async function(){
+    const g = SD.App.getGame();
+    const fresh = SD.Generator.generateSync('expert', 'scroll-reset');
+    SD.App.startWith(fresh.givens, { difficultyName: '测试' }, fresh.solution);
+    SD.App.setHintOpen(true);
+    await new Promise(res => setTimeout(res, 200));
+    const out = document.querySelector('#hint-output');
+    const chips = out.querySelectorAll('.hint-chip');
+    if (chips.length < 2) return { ok: false, info: '解法太少，测不了' };
+    // 先把正文压到能滚动、滚到底，模拟「读到一半」。
+    // 只设 height 不够：面板里它是 flex: 1，flex-basis 会盖掉 height。
+    const natural = out.style.cssText;
+    out.style.flex = 'none';
+    out.style.height = '120px';
+    out.scrollTop = out.scrollHeight;
+    await new Promise(res => setTimeout(res, 60));
+    const scrolledBefore = out.scrollTop > 10;
+    chips[chips.length - 1].click();
+    await new Promise(res => setTimeout(res, 150));
+    const backToTop = out.scrollTop === 0;
+    out.style.cssText = natural;
+    const strip = out.querySelector('.hint-strip');
+    const on = strip.querySelector('.hint-chip.is-on');
+    const visible = on.offsetLeft >= strip.scrollLeft - 1 && on.offsetLeft + on.offsetWidth <= strip.scrollLeft + strip.clientWidth + 1;
+    return { ok: scrolledBefore && backToTop && visible,
+             info: '读到底=' + scrolledBefore + '，换解法后回到顶=' + backToTop + '，选中的技巧在可视范围=' + visible };
+  })()`);
   await step('备局时不会把人拽出首页', `(async function(){
     const fresh = SD.Generator.generateSync('easy', 'keep-view');
     const meta = { difficultyName: '测试' };
