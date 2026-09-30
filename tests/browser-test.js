@@ -547,6 +547,37 @@ async function main() {
     return { ok: homeClear && boardClear,
              info: '出题时遮罩已显示=' + shownNow + '，回首页后 首页遮罩收起=' + homeClear + ' 棋盘遮罩收起=' + boardClear };
   })()`);
+
+  // 这条验的是手机上的底部面板，桌面宽度下它是左右分栏，所以先把视口切成手机
+  await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+  await sleep(400);
+  await step('提示面板贴在棋盘下方且不遮住整块盘面', `(async function(){
+    const g = SD.App.getGame();
+    const fresh = SD.Generator.generateSync('medium', 'sheet');
+    SD.App.startWith(fresh.givens, { difficultyName: '测试' }, fresh.solution);
+    document.getElementById('btn-hint').click();
+    await new Promise(res => setTimeout(res, 400));
+    const area = document.querySelector('#hint-area');
+    const board = document.querySelector('.board-wrap').getBoundingClientRect();
+    const sheet = area.getBoundingClientRect();
+    // 面板必须是 fixed 的：它压在盘面上、只盖住底部一小段，
+    // 否则讲解里的【R2C8】抬头找不到对应格子，等于白讲
+    const isFixed = getComputedStyle(area).position === 'fixed';
+    // 顶边贴在盘面下沿（留几像素缝），不能低到把键盘功能栏的位置也空出来
+    const onTop = sheet.top - board.bottom <= 24;
+    const covered = board.bottom - sheet.top;
+    const ratio = covered / board.height;
+    const actions = document.querySelector('.hint-actions').getBoundingClientRect();
+    const inView = actions.bottom <= window.innerHeight + 1;
+    const padGone = getComputedStyle(document.querySelector('.number-pad')).display === 'none';
+    const toolsGone = getComputedStyle(document.querySelector('.board-tools')).display === 'none';
+    // 棋盘越窄面板越贴不到盘面上，covered 会是负数——那是好事，全盘都看得见
+    const sheetTall = sheet.height > window.innerHeight * 0.25;
+    return { ok: isFixed && onTop && ratio < 0.3 && inView && padGone && toolsGone && sheetTall,
+             info: 'fixed=' + isFixed + '，盘面被遮 ' + Math.max(0, Math.round(ratio * 100)) + '%（' + Math.max(0, Math.round(covered)) + 'px），面板高 ' + Math.round(sheet.height) + 'px，按钮在屏内=' + inView + '，键盘收起=' + padGone + '，功能栏收起=' + toolsGone };
+  })()`);
+  await send('Emulation.clearDeviceMetricsOverride');
+  await sleep(300);
   await step('备局时不会把人拽出首页', `(async function(){
     const fresh = SD.Generator.generateSync('easy', 'keep-view');
     const meta = { difficultyName: '测试' };

@@ -104,11 +104,26 @@
   }
 
   /* ---------------- 提示区展开 / 收起 ---------------- */
-  /** 点开提示后棋盘与提示各占一半：讲解和盘面能同时看见，不用来回滚 */
+  /**
+   * 手机上提示是一块从盘面下方升起的面板：棋盘大小和位置不动，
+   * 面板顶边贴在棋盘下沿，盖住数字键盘与功能栏。
+   * 这样讲解和盘面能同时看见——讲解里写【R2C8】，抬头就能找到是哪一格。
+   */
   function setHintOpen(open) {
+    document.documentElement.style.setProperty('--sheet-top', measureSheetTop());
     $('#hint-area').hidden = !open;
     document.querySelector('.layout').classList.toggle('is-split', open);
     if (open) renderHintPanel();
+  }
+
+  /** 面板顶边 = 棋盘下沿 + 一点缝；屏幕太矮时留至少 38% 给讲解 */
+  function measureSheetTop() {
+    const board = document.querySelector('.board-wrap');
+    if (!board) return '50vh';
+    const bottom = board.getBoundingClientRect().bottom + 8;
+    // 顶边不越过屏幕 70%：再高就盖住棋盘最后两行，讲解里的坐标对不上格子了
+    const cap = window.innerHeight * 0.7;
+    return Math.round(Math.min(bottom, cap)) + 'px';
   }
 
   /** 技巧教学原先挤在侧栏标签里，现在点按钮弹出来，不占棋盘的横向空间 */
@@ -740,6 +755,8 @@
 
     window.addEventListener('resize', U.debounce(() => {
       if (document.documentElement.getAttribute('data-tab') === 'image') SD.OCR.drawStage();
+      // 面板顶边是量出来的，转屏或改窗口后要重新贴一次
+      if (!$('#hint-area').hidden) setHintOpen(true);
     }, 200));
 
     window.addEventListener('beforeunload', () => SD.Store.flush());

@@ -1,0 +1,5 @@
+appId: wbapp_9pOdBz9ViJMUuK9ouIQ50G
+name: 数独工作台
+localDir: D:\Downloads\数独
+appType: web
+entryHtml: index.html

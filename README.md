@@ -265,7 +265,7 @@ Tesseract 会把相邻的数字合并成一个 word，按词中心定位必然�
 ```powershell
 node tests/run-core-tests.js   # 核心逻辑 73 项断言，纯 Node
 node tests/detect-test.js      # 网格自动定位的 7 个场景
-node tests/browser-test.js     # 真实浏览器冒烟 41 项，需要本地服务在线
+node tests/browser-test.js     # 真实浏览器冒烟 42 项，需要本地服务在线
 node tests/ocr-test.js         # 图片识别端到端
 node tests/screenshot.js       # 视觉回归截图
 ```
