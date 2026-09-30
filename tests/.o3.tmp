@@ -1,0 +1,6 @@
+      if (save) {
+        setStatus('体检通过：' + report.reason + '，已存进我的题库。', 'ok');
+        ctx.onSave(B.gridToString(g), report);
+        return;
+      }
+      ctx.applyImported(B.gridToString(g), null, { source: '图片识别' });

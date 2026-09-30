@@ -358,7 +358,8 @@
     }
     if (state.busy) return;
     state.busy = true;
-    ui.btnRecognize.disabled = true;
+    // 禁用按钮只是给人看的状态；recognize 也可能被脚本直接调用，那时还没 mount 过
+    if (ui && ui.btnRecognize) ui.btnRecognize.disabled = true;
     try {
       const src = document.createElement('canvas');
       src.width = state.image.width;
@@ -407,7 +408,7 @@
       log('错误：' + e.message);
     } finally {
       state.busy = false;
-      ui.btnRecognize.disabled = false;
+      if (ui && ui.btnRecognize) ui.btnRecognize.disabled = false;
     }
   }
 
@@ -497,6 +498,8 @@
     const btnRecognize = el('button.btn.btn-primary', { text: '识别数字', onclick: () => recognize() });
     const btnResetQuad = el('button.btn', { text: '重置四角', onclick: () => { resetQuadToImage(); drawStage(); } });
     const btnApply = el('button.btn.btn-primary', { text: '体检并载入棋局', onclick: () => applyResult(ctx) });
+    // 只有挂载在题库页时才给「存起来」——识别结果不一定要变成当前这一局
+    const btnSave = ctx.onSave ? el('button.btn', { text: '存进我的题库', onclick: () => applyResult(ctx, true) }) : null;
 
     ui = { drop: drop, stage: stage, status: status, result: result, log: logBox, btnRecognize: btnRecognize };
 
@@ -506,14 +509,18 @@
     root.appendChild(el('div.btn-row', null, [btnDetect, btnRecognize, btnResetQuad]));
     root.appendChild(status);
     root.appendChild(result);
-    root.appendChild(el('div.btn-row', null, [btnApply]));
+    root.appendChild(el('div.btn-row', null, [btnApply, btnSave]));
     root.appendChild(logBox);
 
     setStatus('先载入图片。识别全程在本机完成，不上传任何服务器。');
   }
 
   /** 识别结果 → 规则体检 → 交给上层载入 */
-  function applyResult(ctx) {
+  /**
+   * 识别结果 → 规则体检 → 交给上层处理。
+   * @param {boolean} save 存进用户题库而不是直接开这一局
+   */
+  function applyResult(ctx, save) {
     const g = new Uint8Array(81);
     let filled = 0;
     for (let i = 0; i < 81; i++) {
@@ -534,6 +541,11 @@
       }
       const cls = report.classification;
       setStatus('体检通过：' + report.reason + '，实测难度 ' + cls.name + '（' + cls.star + ' 星）。正在载入…', 'ok');
+      if (save) {
+        setStatus('体检通过：' + report.reason + '，已存进我的题库。', 'ok');
+        ctx.onSave(B.gridToString(g), report);
+        return;
+      }
       ctx.applyImported(B.gridToString(g), null, { source: '图片识别' });
     }, 20);
   }

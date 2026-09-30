@@ -86,9 +86,12 @@ const SCENES = [
   { name: 'shot-about.png', w: 1400, h: 940, setup: "document.querySelector('.home-item[data-go=about]').click();" },
   { name: 'shot-settings.png', w: 1400, h: 940, setup: "document.documentElement.setAttribute('data-theme','forest'); document.querySelector('.home-item[data-go=settings]').click();" },
   { name: 'shot-game.png', w: 1400, h: 940, setup: WAIT_READY + "SD.App.showView('game');" },
-  { name: 'shot-hint.png', w: 1400, h: 940, setup: WAIT_READY + "SD.App.showView('game'); SD.App.switchTab('hint'); document.getElementById('btn-hint-show').click(); setTimeout(function(){ var r = document.querySelector('#hint-output .ref'); if (r) r.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })); }, 250);" },
+  { name: 'shot-learn.png', w: 1400, h: 940, setup: WAIT_READY + "SD.App.showView('game'); document.getElementById('btn-learn').click();" },
+  { name: 'shot-stats.png', w: 1400, h: 940, setup: "document.querySelector('.home-item[data-go=stats]').click();" },
+  { name: 'shot-hint.png', w: 1400, h: 940, setup: WAIT_READY + "SD.App.showView('game'); document.getElementById('btn-hint').click(); setTimeout(function(){ var r = document.querySelector('#hint-output .ref'); if (r) r.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })); }, 250);" },
   { name: 'shot-note.png', w: 1400, h: 940, setup: WAIT_READY + "SD.App.showView('game'); var g = SD.App.getGame(); g.state.board.locked.fill(0); g.state.board.rebuildNotes(); g.setNoteMode(true); for (var k=0;k<81;k++){ if(g.state.board.notes[k]){ g.select(k); break; } } SD.App.render();" },
   { name: 'shot-mobile.png', w: 390, h: 844, setup: '' },
+  { name: 'shot-mobile-hint.png', w: 390, h: 844, setup: WAIT_READY + "SD.App.showView('game'); document.getElementById('btn-hint').click();" },
   { name: 'shot-mobile-game.png', w: 390, h: 844, setup: WAIT_READY + "SD.App.showView('game');" },
 ];
 

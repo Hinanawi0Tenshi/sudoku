@@ -23,11 +23,15 @@
       </button>
       <button class="home-item" data-go="bank">
         <span class="hi-label">题库</span>
-        <span class="hi-desc">精选题目，随时秒开</span>
+        <span class="hi-desc">精选题目，也可以从照片存自己的</span>
       </button>
       <button class="home-item" data-go="daily">
         <span class="hi-label">每日挑战</span>
         <span class="hi-desc" id="home-daily-desc">同一天全世界同一道题</span>
+      </button>
+      <button class="home-item" data-go="stats">
+        <span class="hi-label">数据</span>
+        <span class="hi-desc">战绩、技巧使用与战绩纪录</span>
       </button>
       <button class="home-item" data-go="settings">
         <span class="hi-label">设置</span>
@@ -96,58 +100,36 @@
       <button class="np-digit" data-digit="9"><span>9</span></button>
       <button class="np-erase" data-digit="0" title="擦除 (Delete / 空格)">⌫</button>
     </div>
-
     <div class="board-tools">
       <button class="btn" id="btn-notes" title="铅笔标记 (N)"><span class="tool-ico">✎</span> 笔记</button>
       <button class="btn" id="btn-hint" title="提示 (H)"><span class="tool-ico">💡</span> 提示</button>
       <button class="btn" id="btn-check" title="检查 (C)"><span class="tool-ico">✓</span> 检查</button>
       <button class="btn" id="btn-auto-notes" title="按当前盘面重算所有铅笔标记">一键笔记</button>
       <button class="btn" id="btn-solve" class="btn-warn"><span class="tool-ico">⚡</span> 自动求解</button>
+      <button class="btn" id="btn-learn" title="技巧教学"><span class="tool-ico">📖</span> 技巧教学</button>
     </div>
   </section>
 
-  <aside class="side">
-    <nav class="tabs" role="tablist">
-      <button class="tab is-active" data-tab="hint" role="tab">提示</button>
-      <button class="tab" data-tab="learn" role="tab">技巧教学</button>
-      <button class="tab" data-tab="image" role="tab">图片识别</button>
-      <button class="tab" data-tab="data" role="tab">数据</button>
-    </nav>
-
-    <div class="tab-body">
-      <div class="panel is-active" data-panel="hint">
-        <div class="hint-toolbar">
-          <label class="field">
-            <span>提示等级上限</span>
-            <select id="hint-level"></select>
-          </label>
-        </div>
-        <div id="hint-output" class="hint-output"></div>
-        <div class="hint-actions">
-          <button class="btn" id="btn-hint-show">只讲解</button>
-          <button class="btn btn-primary" id="btn-hint-apply">讲解并执行</button>
-          <button class="btn" id="btn-hint-auto">自动做完</button>
-        </div>
+  <aside class="hint-area" id="hint-area" hidden>
+    <header class="hint-head">
+      <b>提示</b>
+      <div class="hint-head-actions">
+        <label class="field field-inline">
+          <span>等级上限</span>
+          <select id="hint-level"></select>
+        </label>
+        <button class="btn btn-icon" id="btn-hint-close" title="收起提示">✕</button>
       </div>
-
-      <div class="panel" data-panel="learn">
-        <div class="learn-intro">当前局面可用的技巧会高亮显示。点开任意技巧，看它的原理、步骤与常见误区。</div>
-        <div id="available-techniques" class="tech-available"></div>
-        <div id="technique-library" class="tech-library"></div>
-      </div>
-
-      <div class="panel" data-panel="image">
-        <div id="ocr-root"></div>
-      </div>
-
-      <div class="panel" data-panel="data">
-        <div id="data-root"></div>
-      </div>
+    </header>
+    <div id="hint-output" class="hint-output"></div>
+    <div class="hint-actions">
+      <button class="btn" id="btn-hint-show">只讲解</button>
+      <button class="btn btn-primary" id="btn-hint-apply">讲解并执行</button>
+      <button class="btn" id="btn-hint-auto">自动做完</button>
     </div>
   </aside>
 </main>
 </section>
-
 <div id="dialog-root"></div>
 <div id="toast-root" class="toast-root" aria-live="polite"></div>
 

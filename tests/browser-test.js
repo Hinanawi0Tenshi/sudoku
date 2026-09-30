@@ -228,7 +228,7 @@ async function main() {
     const fresh = SD.Generator.generateSync('expert', 'hint-list');
     g.start(fresh.givens, { difficultyName: '测试' }, fresh.solution);
     g.state.board.locked.fill(0);
-    SD.App.switchTab('hint');
+    SD.App.setHintOpen(true);
     document.getElementById('btn-hint-show').click();
     await new Promise(res => setTimeout(res, 120));
     const chips = Array.from(document.querySelectorAll('#hint-output .hint-chip')).map(e => e.textContent);
@@ -327,10 +327,10 @@ async function main() {
     return { ok: on.join(',') === '7', info: '点亮的数字=' + (on.join(',') || '无') + '，选中格笔记=0b' + g.state.board.notes[0].toString(2) };
   })()`);
 
-  await step('启动落在首页且五个入口都在', `(async function(){
+  await step('启动落在首页且六个入口都在', `(async function(){
     const view = document.documentElement.getAttribute('data-view');
     const items = Array.from(document.querySelectorAll('.home-item')).map((b) => b.dataset.go);
-    const want = ['play', 'bank', 'daily', 'settings', 'about'];
+    const want = ['play', 'bank', 'daily', 'stats', 'settings', 'about'];
     return { ok: view === 'home' && items.join(',') === want.join(','),
              info: '视图=' + view + '，入口 ' + items.join(' / ') };
   })()`);
@@ -558,7 +558,7 @@ async function main() {
     const fresh = SD.Generator.generateSync('expert', 'cell-ref');
     g.start(fresh.givens, { difficultyName: '测试' }, fresh.solution);
     g.state.board.locked.fill(0);
-    SD.App.switchTab('hint');
+    SD.App.setHintOpen(true);
     document.getElementById('btn-hint-show').click();
     await new Promise(res => setTimeout(res, 150));
     const refs = document.querySelectorAll('#hint-output .ref');
@@ -576,17 +576,42 @@ async function main() {
     return { ok: right && cleared && first.textContent === label,
              info: refs.length + ' 处引用，' + first.textContent + ' → 第 ' + cell + ' 格，点亮=' + right + '，移出后清空=' + cleared };
   })()`);
-  await step('技巧教学面板渲染出全部技巧', `(async function(){
-    SD.App.switchTab('learn');
+  await step('技巧教学弹窗渲染出全部技巧', `(async function(){
+    SD.App.showView('game');
+    await new Promise(r => setTimeout(r, 80));
+    document.getElementById('btn-learn').click();
+    await new Promise(r => setTimeout(r, 200));
+    const cards = document.querySelectorAll('.modal .tech-card');
+    const chips = document.querySelectorAll('.modal .tech-chip');
+    // 弹窗里点开一条，卡片要能原地展开成完整讲解
+    const head = document.querySelector('.modal .tech-head');
+    if (head) head.click();
     await new Promise(r => setTimeout(r, 150));
-    const cards = document.querySelectorAll('#technique-library .tech-card');
-    return { ok: cards.length >= 12, info: cards.length + ' 张技巧卡片' };
+    const opened = document.querySelectorAll('.modal .tech-card.is-open').length;
+    const close = document.querySelector('.modal-foot .btn');
+    if (close) close.click();
+    return { ok: cards.length >= 12 && opened === 1,
+             info: cards.length + ' 张技巧卡片，本局面可用 ' + chips.length + ' 种，展开 ' + opened + ' 条' };
   })()`);
-
-  await step('OCR 引擎脚本已就位', `(function(){
-    const has = typeof Tesseract !== 'undefined' && typeof Tesseract.createWorker === 'function';
-    const stage = document.querySelector('#ocr-root .ocr-drop');
-    return { ok: has && !!stage, info: 'Tesseract=' + has + ' 面板=' + !!stage };
+  await step('题库页挂着图片识别与我的题库', `(async function(){
+    SD.App.showView('home');
+    await new Promise(r => setTimeout(r, 80));
+    document.querySelector('.home-item[data-go=bank]').click();
+    await new Promise(r => setTimeout(r, 300));
+    const drop = document.querySelector('#page-root .ocr-drop');
+    const builtIn = document.querySelectorAll('#page-root .bank-item:not(.is-mine)').length;
+    const saved = document.querySelectorAll('#page-root .bank-item.is-mine').length;
+    // 存一道再退回首页重进，验证它真的落到了存储里并且页面会重画
+    SD.Store.addUserPuzzle(SD.Bank.LIST[2].grid, '我的题目 1', '简单');
+    const stored = SD.Store.userBank().length;
+    document.getElementById('page-back').click();
+    await new Promise(r => setTimeout(r, 120));
+    document.querySelector('.home-item[data-go=bank]').click();
+    await new Promise(r => setTimeout(r, 300));
+    const mine = document.querySelectorAll('#page-root .bank-item.is-mine').length;
+    const playable = !!document.querySelector('#page-root .bank-item.is-mine .btn-primary');
+    return { ok: !!drop && builtIn === SD.Bank.LIST.length && stored === saved + 1 && mine === stored && playable,
+             info: 'OCR 入口=' + !!drop + '，精选 ' + builtIn + ' 道，存入 ' + stored + ' 道，重进页面显示 ' + mine + ' 道，可开始=' + playable };
   })()`);
 
   await step('透视校正数学正确（合成测试）', `(function(){

@@ -101,16 +101,35 @@
     return { rerender: render, applyTheme: applyTheme, fillHintLevels: fillHintLevels };
   }
   function renderAllPanels() {
-    const st = game.state;
-    U.$$('.panel').forEach((p) => {
-      const key = p.dataset.panel;
-      if (key === 'hint') renderHintPanel();
-      else if (key === 'learn') {
-        SD.Panels.renderAvailable($('#available-techniques'), st.board.grid);
-        SD.Panels.renderLibrary($('#technique-library'), openTech);
-      } else if (key === 'data') SD.Data.renderData($('#data-root'), { game: game, applyImported: applyImported });
-      else if (key === 'image') SD.OCR.mount($('#ocr-root'), { applyImported: applyImported });
+    renderHintPanel();
+  }
+
+  /* ---------------- 提示区展开 / 收起 ---------------- */
+  /** 点开提示后棋盘与提示各占一半：讲解和盘面能同时看见，不用来回滚 */
+  function setHintOpen(open) {
+    $('#hint-area').hidden = !open;
+    document.querySelector('.layout').classList.toggle('is-split', open);
+    if (open) renderHintPanel();
+  }
+
+  /** 技巧教学原先挤在侧栏标签里，现在点按钮弹出来，不占棋盘的横向空间 */
+  function openLearnModal() {
+    const body = el('div.learn-modal');
+    const available = el('div.tech-available');
+    const library = el('div.tech-library');
+    body.appendChild(el('div.learn-intro', { text: '当前局面可用的技巧会高亮显示。点开任意技巧，看它的原理、步骤与常见误区。' }));
+    body.appendChild(available);
+    body.appendChild(library);
+    const draw = () => {
+      SD.Panels.renderAvailable(available, game.state.board.grid);
+      SD.Panels.renderLibrary(library, openTech);
+    };
+    library.addEventListener('techpick', (e) => {
+      openTech = e.detail;
+      draw();
     });
+    draw();
+    return modal({ title: '技巧教学', body, footer: [{ label: '关闭' }] });
   }
 
   /* ---------------- 对局启动 ---------------- */
@@ -274,11 +293,12 @@
   }
 
 
-  /** 启动页的五个入口。游戏页里没有这些按钮，所以这里是唯一的导航 */
+  /** 启动页的六个入口。游戏页里没有这些按钮，所以这里是唯一的导航 */
   function handleHome(go) {
     if (go === 'play') { openNewGameDialog(); return; }
     if (go === 'bank') { openPage('题库', openBankPage); return; }
     if (go === 'daily') { calMonth = null; openPage('每日挑战', openDailyPage); return; }
+    if (go === 'stats') { openPage('数据', (root) => SD.Data.renderData(root, { game: game, applyImported: applyImported })); return; }
     if (go === 'settings') { openPage('设置', (root) => SD.Settings.renderSettings(root, settingsCtx())); return; }
     if (go === 'about') { openPage('关于', openAboutPage); return; }
   }
@@ -298,7 +318,14 @@
 
   /* ---------------- 题库页 ---------------- */
   function openBankPage(root) {
-    root.appendChild(el('p.lead', { text: '预先验过的固定题目，点一下就上盘，不用等出题。' }));
+    root.appendChild(el('p.lead', { text: '精选题目点一下就上盘；也可以从照片把题读出来，存进你自己的题库。' }));
+    root.appendChild(el('h3.sec-title', { text: '从图片添加' }));
+    const ocrBox = el('div.ocr-box');
+    root.appendChild(ocrBox);
+    root.appendChild(el('h3.sec-title', { text: '我的题库' }));
+    const mine = el('div.bank-list');
+    root.appendChild(mine);
+    root.appendChild(el('h3.sec-title', { text: '精选题目' }));
     const list = el('div.bank-list');
     for (const p of SD.Bank.LIST) {
       const info = SD.Bank.describe(p);
@@ -317,16 +344,61 @@
       );
     }
     root.appendChild(list);
+
+    SD.OCR.mount(ocrBox, {
+      applyImported: applyImported,
+      onSave: (grid, report) => {
+        const n = mine.querySelectorAll('.bank-item').length + 1;
+        SD.Store.addUserPuzzle(grid, '我的题目 ' + n, report.classification.name);
+        drawMine();
+        toast('已存进我的题库', 'ok');
+      },
+    });
+
+    function drawMine() {
+      U.clear(mine);
+      const saved = SD.Store.userBank();
+      if (!saved.length) {
+        mine.appendChild(el('p.lead', { text: '还没有自己存的题。上面识别成功后点「存进我的题库」。' }));
+        return;
+      }
+      for (const p of saved) {
+        const clues = p.grid.replace(/\./g, '').length;
+        mine.appendChild(
+          el('div.bank-item.is-mine', null, [
+            el('div.bi-main', null, [
+              el('b.bi-name', { text: p.name }),
+              el('span.bi-band', { text: p.band || '自定义' }),
+            ]),
+            el('div.bi-meta', { text: clues + ' 个线索' }),
+            el('div.bi-row', null, [
+              el('button.btn.btn-primary', { text: '开始', onclick: () => playUserPuzzle(p) }),
+              el('button.btn', {
+                text: '删除',
+                onclick: () => { SD.Store.removeUserPuzzle(p.id); drawMine(); },
+              }),
+            ]),
+          ])
+        );
+      }
+    }
+    drawMine();
   }
 
   function playBank(id) {
     const p = SD.Bank.byId(id);
     if (!p) return;
     const info = SD.Bank.describe(p);
-    const report = applyImported(p.grid, null, { source: '题库' });
-    if (report) {
+    if (applyImported(p.grid, null, { source: '题库' })) {
       game.state.meta.title = p.name;
       game.state.meta.difficultyName = info.band;
+      render();
+      showView('game');
+    }
+  }
+  function playUserPuzzle(p) {
+    if (applyImported(p.grid, null, { source: '我的题库' })) {
+      game.state.meta.title = p.name;
       render();
       showView('game');
     }
@@ -567,25 +639,14 @@
         el('div.card', { style: { marginTop: '14px' } }, [el('h3', { text: '你用到的技巧' }), rows.length ? rows : el('p', { text: '全程自己推，没有用提示——这局是纯实力。' })]),
       ],
       footer: [
-        { label: '看看复盘', onClick: () => switchTab('learn') },
+        { label: '看看复盘', onClick: openLearnModal },
         { label: '再来一局', primary: true, onClick: () => newGame(SD.Store.settings().lastDifficulty) },
       ],
     });
   }
 
-  /* ---------------- 标签页 ---------------- */
-  function switchTab(key) {
-    U.$$('.tab').forEach((t) => t.classList.toggle('is-active', t.dataset.tab === key));
-    U.$$('.panel').forEach((p) => p.classList.toggle('is-active', p.dataset.panel === key));
-    if (key === 'image') SD.OCR.drawStage();
-    if (key === 'data') SD.Data.renderData($('#data-root'), { game: game, applyImported: applyImported });
-    if (key === 'learn') {
-      SD.Panels.renderAvailable($('#available-techniques'), game.state.board.grid);
-      SD.Panels.renderLibrary($('#technique-library'), openTech);
-    }
-  }
 
-  SD.App = { getGame: () => game, render: render, applyImported: applyImported, switchTab: switchTab, newGame: newGame, loadImported: loadImported, showView: showView, playBank: playBank, openPage: openPage, startWith: startWith };
+  SD.App = { getGame: () => game, render: render, applyImported: applyImported, newGame: newGame, loadImported: loadImported, showView: showView, playBank: playBank, openPage: openPage, startWith: startWith, setHintOpen: setHintOpen };
 
   /* ---------------- 事件接线与启动 ---------------- */
   /** 讲解里的【R2C6】指到哪一格，棋盘就点亮哪一格；触屏没有 hover，用长按代替 */
@@ -619,7 +680,12 @@
     U.$$('.home-item').forEach((b) => b.addEventListener('click', () => handleHome(b.dataset.go)));
     $('#page-back').addEventListener('click', () => showView('home'));
     $('#btn-notes').addEventListener('click', () => { game.setNoteMode(); render(); });
-    $('#btn-hint').addEventListener('click', doHint);
+    $('#btn-hint').addEventListener('click', () => {
+      setHintOpen(true);
+      doHint(false);
+    });
+    $('#btn-hint-close').addEventListener('click', () => setHintOpen(false));
+    $('#btn-learn').addEventListener('click', openLearnModal);
     $('#btn-check').addEventListener('click', checkBoard);
     $('#btn-auto-notes').addEventListener('click', () => {
       // 一次性动作：按当前盘面把所有格子的候选数铺一遍，而不是开关
@@ -651,16 +717,8 @@
       });
     });
 
-    U.$$('.tab').forEach((tab) => tab.addEventListener('click', () => switchTab(tab.dataset.tab)));
-
-    // 提示面板里点选某一条解法（只预演，不落子）
+    // 提示区里点选某一条解法（只预演，不落子）
     document.addEventListener('hintpick', (e) => selectHint(e.detail));
-
-    document.addEventListener('techpick', (e) => {
-      openTech = e.detail;
-      SD.Panels.renderLibrary($('#technique-library'), openTech);
-      SD.Panels.renderAvailable($('#available-techniques'), game.state.board.grid);
-    });
 
     document.addEventListener('keydown', onKeyDown);
 
@@ -674,7 +732,7 @@
   /** 只讲解 / 讲解并执行：都作用于面板上当前选中的那一条解法 */
   function doHint(apply) {
     refreshHints();
-    switchTab('hint');
+    setHintOpen(true);
     if (!hintList.length) {
       renderHintPanel();
       toast('当前局面没有可用解法了，试试调高「提示等级上限」', 'err');

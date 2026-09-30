@@ -1,0 +1,5 @@
+  /**
+   * 识别结果 → 规则体检 → 交给上层处理。
+   * @param {boolean} save 存进用户题库而不是直接开这一局
+   */
+  function applyResult(ctx, save) {

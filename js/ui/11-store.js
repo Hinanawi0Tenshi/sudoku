@@ -36,15 +36,16 @@
   function read() {
     try {
       const raw = localStorage.getItem(KEY);
-      if (!raw) return { settings: Object.assign({}, DEFAULT_SETTINGS), stats: emptyStats(), game: null };
+      if (!raw) return { settings: Object.assign({}, DEFAULT_SETTINGS), stats: emptyStats(), game: null, userBank: [] };
       const parsed = JSON.parse(raw);
       return {
         settings: Object.assign({}, DEFAULT_SETTINGS, parsed.settings || {}),
         stats: Object.assign(emptyStats(), parsed.stats || {}),
         game: parsed.game || null,
+        userBank: parsed.userBank || [],
       };
     } catch (e) {
-      return { settings: Object.assign({}, DEFAULT_SETTINGS), stats: emptyStats(), game: null };
+      return { settings: Object.assign({}, DEFAULT_SETTINGS), stats: emptyStats(), game: null, userBank: [] };
     }
   }
 
@@ -82,6 +83,28 @@
     return state.game;
   }
 
+  /* ---------------- 我的题库 ---------------- */
+  /**
+   * 用户从照片存进来的题目。单独一个顶层键，不混进 stats：
+   * stats 的形状会在数据面板里整块导出，掺进题目数组会撑破它的表格。
+   */
+  function userBank() {
+    return state.userBank || [];
+  }
+
+  function addUserPuzzle(grid, name, band) {
+    const list = userBank().slice();
+    const id = 'u' + Date.now().toString(36);
+    list.unshift({ id: id, name: name, grid: grid, band: band, addedAt: Date.now() });
+    state.userBank = list.slice(0, 60);
+    save();
+    return id;
+  }
+
+  function removeUserPuzzle(id) {
+    state.userBank = userBank().filter((p) => p.id !== id);
+    save();
+  }
   /* ---------------- 统计写入 ---------------- */
 
   function recordGame(result) {
@@ -187,6 +210,9 @@
     recordTechnique: recordTechnique,
     dailyStats: dailyStats,
     recordDailyProgress: recordDailyProgress,
+    userBank: userBank,
+    addUserPuzzle: addUserPuzzle,
+    removeUserPuzzle: removeUserPuzzle,
     resetStats: resetStats,
     resetSettings: resetSettings,
     resetAll: resetAll,

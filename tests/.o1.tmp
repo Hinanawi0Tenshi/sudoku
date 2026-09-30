@@ -1,0 +1,4 @@
+    const btnApply = el('button.btn.btn-primary', { text: '体检并载入棋局', onclick: () => applyResult(ctx) });
+    // 只有挂载在题库页时才给「存起来」——识别结果不一定要变成当前这一局
+    const btnSave = ctx.onSave ? el('button.btn', { text: '存进我的题库', onclick: () => applyResult(ctx, true) }) : null;
+    
