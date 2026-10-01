@@ -124,7 +124,23 @@ curl -L "https://sudoku-studio.app.workbuddy.host/js/ui/14-panels.js?t=$(date +%
   因此**图片识别**是唯一没法自动验证的环节，改到 OCR 相关代码后要提醒用户亲手上传一张
   数独截图试一下。
 
-## 六、常见需求怎么走
+## 六、别的 harness 用不了发布工具怎么办
+
+`workbuddy_sites_deploy` 只有 WorkBuddy 里的 agent 能调，用户手上可能有别的 agent 框架
+（dsh、Claude Code 之类）在同一个目录写代码，它们发不了版。
+
+**`tests/verify-live.js` 是纯 Node 脚本，不依赖任何 WorkBuddy 能力，任何环境都能跑。**
+所以别的 harness 至少可以自己判断"本地和线上有没有差异"：
+
+```bash
+node tests/verify-live.js     # 一致 → 不用管；不一致 → 告诉用户"有改动没上线，需要发布"
+```
+
+不要为了让别的 harness 能自己发布去做定时自动化：发布平台的同意闸要求用户**本轮消息**里
+明确说过要发布，定时跑起来的 agent 拿不到这个同意，硬设 `userAskedToPublish: true` 属于绕过
+安全闸，不能这么干。正确的分工是：别的 harness 写码 + 校验，发布这一下交回 WorkBuddy。
+
+## 七、常见需求怎么走
 
 | 用户说 | 你要做的 |
 |---|---|

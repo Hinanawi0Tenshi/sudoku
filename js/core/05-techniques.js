@@ -951,12 +951,12 @@
   }
 
   /**
-   * 裸二元集出数型：同一区域里 N 格，其中 N-1 格的候选恰好是同一个 N-1 元集合 A，
-   * 剩下一格的候选是 A ∪ {e}，恰好多出一个数。
+   * 裸数组出数型：同一区域里 N 格，其中 N-1 格的候选恰好是同一个 N-1 元集合 A，
+   * 剩下一格的候选是 A ∪ {e}，恰好多出一个数，于是它只能是 e。
    * 推理：那 N-1 格构成裸 N-1 数组，把 A 占满了，落单那格只能取 e。
-   * 只有「恰好多一个」才敢这么判；多出两个以上时它未必是 e，推导不成立。
+   *
    */
-  function findAlsPlacement(state) {
+  function findNakedSetPlacement(state) {
     const { grid, cand } = state;
     for (let u = 0; u < UNITS.length; u++) {
       const cells = UNITS[u].filter((i) => !grid[i] && cand[i]);
@@ -972,7 +972,7 @@
           const extra = cand[odd] & ~mask;
           if (popcount(extra) !== 1) continue;
           const e = Math.log2(extra) + 1;
-          return baseStep('almost-locked-set', {
+          return baseStep('naked-set-placement', {
             focusCell: odd,
             focusDigit: e,
             cells: C,
@@ -1026,9 +1026,9 @@
   });
 
   register({
-    id: 'almost-locked-set',
-    name: '裸二元集（出数型）',
-    alias: ['ALS', 'Almost Locked Set', '裸二元集'],
+    id: 'naked-set-placement',
+    name: '裸数组出数',
+    alias: ['Naked Set Placement', '裸数组出数'],
     level: 5,
     category: '专家',
     order: 53,
@@ -1037,9 +1037,9 @@
       '同一区域里 N 格，其中 N-1 格的候选恰好是同一个 N-1 元集合 A，剩下一格的候选是 A 再多一个数 e。那 N-1 格构成裸 N-1 数组，把 A 占满了，于是落单那格只能取 e。',
     howto: ['在任一区域里找 N 格，其中 N-1 格候选完全一样且个数正好比格数少一；', '看落单那格的候选有没有恰好多出一个数 e；', '若有，落单那格填 e。'],
     pitfalls:
-      '「恰好多一个」是硬条件。落单那格若多出两个以上，它未必是 e，推导不成立。本作只收出数这一型；裸二元集的删数型要额外谈「同时看得到整个数组」的格子，判定更啰嗦，暂未收录。',
+      '「恰好多一个」是硬条件。落单那格若多出两个以上，它未必是 e，推导不成立。注意这与「裸二元集 ALS」不是一回事：ALS 要求异类格是**多候选**的，好让删数型成立；本作这一型异类格只有 N 个候选，与基础组同格数，归根到底还是裸数组，所以没挂 ALS 的名字。真正的 ALS 与它的删数型尚未收录。',
     find(state) {
-      return findAlsPlacement(state);
+      return findNakedSetPlacement(state);
     },
   });
   /**
