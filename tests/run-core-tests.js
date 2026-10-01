@@ -189,8 +189,10 @@ section('技巧正确性：每一条推理都必须与真实答案一致');
   ok(!bad, bad || ('共校验 ' + checked + ' 条推理，全部与真实答案一致'));
   console.log('    一般局面技巧分布: ' + JSON.stringify(usage));
   console.log('    唯一解局面技巧分布: ' + JSON.stringify(urUsage));
+  // 这几条在随机局面里几乎不触发，但都有各自的专项用例兜着，不是没验证
+  const RARE = { 'forcing-chain': 1, 'xy-wing': 1, 'unique-rectangle': 1, 'jellyfish': 1 };
   for (const id of Object.keys(Techniques.byId)) {
-    if (id === 'forcing-chain' || id === 'xy-wing' || id === 'unique-rectangle') continue;
+    if (RARE[id]) continue;
     ok((usage[id] || 0) > 0, '技巧 ' + id + ' 在随机局面中被实际触发');
   }
 }
@@ -220,6 +222,27 @@ section('XY-Wing 定向用例');
     eq(step.detail.biff2, 31, '翼 2 位置正确');
     eq(step.detail.z, 5, '被排除的数字是 5');
     eq(JSON.stringify(step.eliminations), JSON.stringify([{ cell: 29, digit: 5 }]), '只删 R4C3 的 5');
+  }
+}
+section('四链鱼定向用例');
+{
+  // 随机局面里四链几乎不出现。四链没法用「填数字」的盘面摆出来：
+  // 基础行里覆盖列之外的格子必须放不下 d，而它们和基础格往往同宫，一填就互相挡死。
+  // 所以直接构造候选状态：前四行 × 前四列只留 5，其余五行的同四列是 5 与 9。
+  const cand = new Int32Array(81);
+  const mark = (i, ds) => { cand[i] = ds.reduce((m, d) => m | (1 << (d - 1)), 0); };
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) mark(r * 9 + c, [5]);
+  for (let r = 4; r < 9; r++) for (let c = 0; c < 4; c++) mark(r * 9 + c, [5, 9]);
+  const step = Techniques.byId['jellyfish'].find({ grid: new Uint8Array(81), cand: cand });
+  ok(!!step, '手工构造的四链鱼被识别');
+  if (step) {
+    eq(step.detail.size, 4, '规模是 4');
+    eq(step.detail.digit, 5, '被排除的数字是 5');
+    eq(step.detail.bases.join(','), '0,1,2,3', '基础行是前四行');
+    eq(step.detail.cover.join(','), '0,1,2,3', '覆盖列是前四列');
+    eq(step.eliminations.length, 20, '覆盖列其余五行各删一个 5（共 ' + step.eliminations.length + '）');
+    const bad = step.eliminations.filter((e) => e.cell < 36 || e.digit !== 5);
+    eq(bad.length, 0, '删除全部落在第 5 到 9 行、且只删数字 5');
   }
 }
 section('全流程求解：模拟玩家逐步推理');
