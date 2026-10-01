@@ -1050,6 +1050,7 @@
     id: 'unique-rectangle',
     name: '唯一矩形（类型 1）',
     alias: ['UR1', 'Unique Rectangle', '唯一矩形'],
+    needsUnique: true,   // 靠致命模式论证，题面多解时会给出错误提示
     level: 4,
     category: '高级',
     order: 41,
@@ -1160,12 +1161,34 @@
     return findStepFrom(makeState(grid), opts);
   }
 
+  /**
+   * 唯一性检查的缓存。
+   * 唯一矩形这一族靠「致命模式」论证，题面多解时会给出错误提示；
+   * 而生成器出的题必然唯一、OCR 导入的题不一定，所以要在提示链路上真查一次。
+   * 数解很贵，按题面缓存：同一局反复点提示不重复算，换题才算。
+   */
+  let uniqueKey = null;
+  let uniqueVal = false;
+  function gridUnique(grid) {
+    const key = Array.prototype.join.call(grid, '');
+    if (key !== uniqueKey) {
+      uniqueVal = SD.Solver.solve(grid, 2).count === 1;
+      uniqueKey = key;
+    }
+    return uniqueVal;
+  }
+
   /** 当前局面所有可用技巧，供教学面板展示 */
   function findAll(grid, maxLevel) {
     const state = makeState(grid);
     const out = [];
+    let unique = null;
     for (const t of LIST) {
       if (t.level > (maxLevel || 5) || !t.find) continue;
+      if (t.needsUnique) {
+        if (unique === null) unique = gridUnique(grid);
+        if (!unique) continue;
+      }
       const s = decorate(t, t.find(state));
       if (s) out.push(s);
     }

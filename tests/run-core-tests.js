@@ -273,6 +273,57 @@ section('融合式待定数组定向用例');
   }
 }
 
+section('全流程求解：模拟玩家逐步推理');
+{
+  let solved = 0;
+  const total = 15;
+  const seenIds = {};
+  for (let t = 0; t < total; t++) {
+    const gen = Generator.generateSync(Generator.DIFFICULTY_ORDER[t % 5], 'flow-' + t);
+    const g = gen.givens.slice();
+    const cand = Validation.computeCandidates(g);
+    let stuck = false;
+    for (let guard = 0; guard < 600; guard++) {
+      const step = Techniques.findStepFrom({ grid: g, cand: cand }, { maxLevel: 5 });
+      if (!step) { stuck = !Validation.isComplete(g); break; }
+      seenIds[step.id] = (seenIds[step.id] || 0) + 1;
+      for (const p of step.placements) {
+        if (gen.solution[p.cell] !== p.digit) { ok(false, '生成题 ' + t + ' 上技巧 ' + step.id + ' 推出错误数字'); }
+      }
+      for (const el of step.eliminations) {
+        if (gen.solution[el.cell] === el.digit) { ok(false, '生成题 ' + t + ' 上技巧 ' + step.id + ' 误删候选'); }
+      }
+      Techniques.commit(g, cand, step);
+    }
+    if (Validation.isComplete(g) && B.gridToString(g) === B.gridToString(gen.solution)) solved++;
+  }
+  eq(solved, total, total + ' 道生成题均可由人类技巧完整还原为记录解');
+  console.log('    全流程技巧分布: ' + JSON.stringify(seenIds));
+}
+
+section('题面多解时不给出唯一性技巧');
+{
+  // 唯一矩形靠「致命模式」论证，题面多解时结论不成立——OCR 导入的题未必唯一
+  // 从生成的题里去掉一个冗余线索，得到「现实中」的多解题：普通技巧照常能跑
+  let grid = null;
+  for (let t2 = 0; t2 < 12 && !grid; t2++) {
+    const gen = Generator.generateSync('easy', 'multi-seed-' + t2);
+    for (let i = 0; i < 81; i++) {
+      if (!gen.givens[i]) continue;
+      const trial = gen.givens.slice();
+      trial[i] = 0;
+      if (Solver.solve(trial, 2).count > 1) { grid = trial; break; }
+    }
+  }
+  ok(!!grid, '找到了去掉冗余线索后多解的题');
+  const count = grid ? Solver.solve(grid, 2).count : 0;
+  ok(count > 1, '造出了多解题面（解数 ' + count + '）');
+  if (count > 1) {
+    const ids = Techniques.findAll(grid, 5).map((s) => s.id);
+    ok(ids.indexOf('unique-rectangle') < 0, '多解时不出现唯一矩形');
+    ok(ids.indexOf('naked-single') >= 0 || ids.indexOf('hidden-single') >= 0, '但普通技巧照常可用');
+  }
+}
 section('simulate 与难度评级');
 {
   const gen = Generator.generateSync('medium', 'rate-1');
