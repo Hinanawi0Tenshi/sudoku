@@ -1223,6 +1223,95 @@
     },
   });
   /**
+   * 退化鱼（Franken Fish）：鱼形家族的放宽版。
+   * 标准鱼形要求每条基础线里 d 的候选恰好落在同样 size 条覆盖线上；
+   * 退化版允许某条基础线只有一个 d 候选——对应那个「鳍位」已经被别的数字占了。
+   * 只要所有基础线的候选并起来仍正好是 size 条覆盖线，结论一样成立：
+   * 反证与标准鱼形同源，覆盖线上多出来的格子若取 d，逐条基础线会被逼回原处，形成矛盾。
+   * 基础线一条候选都没有时不提供任何信息，直接剔除，不参与本条鱼。
+   */
+  function findFrankenFish(state, size) {
+    const { grid, cand } = state;
+
+    const run = (baseIsRows) => {
+      const at = (b, ci) => (baseIsRows ? b * N + ci : ci * N + b);
+
+      for (let d = 1; d <= N; d++) {
+        const mb = bit(d);
+        for (const bases of combos(N, size)) {
+          const baseSet = new Set(bases);
+          const sets = bases.map((b) => {
+            const s = [];
+            for (let ci = 0; ci < N; ci++) {
+              const i = at(b, ci);
+              if (!grid[i] && cand[i] & mb) s.push(ci);
+            }
+            return s;
+          });
+
+          const cover = [];
+          const seen = new Set();
+          for (const s of sets) for (const ci of s) if (!seen.has(ci)) { seen.add(ci); cover.push(ci); }
+          if (cover.length !== size) continue;
+          // 至少一条基础线的候选数要严格少于 size，否则就是普通鱼形（X-Wing 会先命中），
+          // 且退化放宽会引入不必要的风险；并且每条基础线都得至少有一个候选，
+          // 全空说明它根本不需要这个数，参与推理会出错。
+          if (!sets.some((s) => s.length < size)) continue;
+          if (sets.some((s) => s.length === 0)) continue;
+
+          const elims = [];
+          for (const ci of cover) {
+            for (let k = 0; k < N; k++) {
+              const i = baseIsRows ? k * N + ci : ci * N + k;
+              const bi = baseIsRows ? ROW[i] : COL[i];
+              if (baseSet.has(bi) || grid[i] || !(cand[i] & mb)) continue;
+              elims.push({ cell: i, digit: d });
+            }
+          }
+          if (!elims.length) continue;
+
+          const marks = [];
+          for (let k = 0; k < bases.length; k++) {
+            for (const ci of sets[k]) marks.push({ cell: at(bases[k], ci), digit: d });
+          }
+
+          return baseStep('franken-fish', {
+            focusCell: marks[0].cell,
+            focusDigit: d,
+            cells: marks.map((m) => m.cell).concat(elims.map((x) => x.cell)),
+            units: (baseIsRows ? bases : bases.map((b) => N + b)).concat(
+              baseIsRows ? cover.map((c) => N + c) : cover
+            ),
+            eliminations: elims,
+            marks: marks,
+            detail: { digit: d, bases: bases, cover: cover, baseIsRows: baseIsRows, size: size },
+          });
+        }
+      }
+      return null;
+    };
+
+    return run(true) || run(false);
+  }
+
+  register({
+    id: 'franken-fish',
+    name: '退化鱼',
+    alias: ['Franken Fish', 'Franken X-Wing', '退化鱼形'],
+    level: 4,
+    category: '高级',
+    order: 44,
+    tagline: '鱼形家族的放宽版：某条基础线只剩一个候选，鳍位已被别的数字占了。',
+    principle:
+      '标准鱼形要求每条基础线里 d 的候选恰好落在同样 size 条覆盖线上。退化版允许某条基础线只有一个 d 候选——那个位置已经被别的数字占了。只要所有基础线的候选合起来仍正好是 size 条覆盖线，结论一样成立：覆盖线上不属于任何基础线的格子若取了 d，每条基础线就被迫回到原处，与它候选只在覆盖线上矛盾。名字里的「退化」指这个鳍位残缺。',
+    howto: ['固定数字 d，挑 size 条基础线（行或列）；', '把每条基础线里 d 的候选位置列出来；', '看它们的并集是否正好是 size 条覆盖线；', '删掉覆盖线上其余格子的 d 候选。'],
+    pitfalls:
+      '并集必须正好是 size 条。多一条说明不成鱼（退回标准鱼形判定），少一条说明覆盖不足、结论不成立。基础线一条候选都没有时不提供信息，应当剔除而不是硬凑。',
+    find(state) {
+      return findFrankenFish(state, 2);
+    },
+  });
+  /**
    * 依赖「题目唯一解」这个前提：若第四格取了三数组里的某个数，整盘就能重排出第二组解。
    * 几何条件是四格恰好落在两个宫内——跨四个宫时推导不成立。
    */
