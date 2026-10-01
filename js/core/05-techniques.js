@@ -1434,6 +1434,94 @@
     },
   });
   /**
+   * 空矩形（Empty Rectangle）。
+   * 形制：取宫 B、数字 d，宫内 d 的候选全部落在「宫内某一行 R ∪ 某一列 C」之内，
+   * 剩下那 4 格不含 d。再找一条强链——某列里 d 的候选恰好只有 A、Bc 两格，且 A 落在行 R 上。
+   * 于是 (行 Bc × 列 C) 这一格不可能是 d，删掉它的 d 候选。
+   * 反证：设该格取 d。它与行 R 上那个 d 候选同区，挤掉了行 R 的另一处候选；
+   *   而强链 A 与它同区，于是强链另一端 Bc 被迫占据该格的列——与它已取 d 矛盾。
+   *
+   * 关键几何约束：强链两格要么都在宫内，要么都在宫外；
+   * 一内一外的混合配置存在反例，此时行 R 与列 C 构不成封闭区域。
+   */
+  function findEmptyRectangle(state) {
+    const { grid, cand } = state;
+    const boxRows = (b) => [((b / 3) | 0) * 3, ((b / 3) | 0) * 3 + 1, ((b / 3) | 0) * 3 + 2];
+    const boxCols = (b) => [(b % 3) * 3, (b % 3) * 3 + 1, (b % 3) * 3 + 2];
+
+    for (let b = 0; b < 9; b++) {
+      for (let d = 1; d <= N; d++) {
+        const mb = bit(d);
+        const inBox = [];
+        for (let i = 0; i < B.CELL_COUNT; i++) if (BOX[i] === b && !grid[i] && (cand[i] & mb)) inBox.push(i);
+        if (inBox.length < 2) continue;
+
+        for (const R of boxRows(b)) {
+          for (const C of boxCols(b)) {
+            // 宫内 d 候选必须全部落在 (行 R ∪ 列 C) 之内
+            const ok = inBox.every((i) => ROW[i] === R || COL[i] === C);
+            if (!ok) continue;
+
+            for (let c2 = 0; c2 < N; c2++) {
+              const spots = [];
+              for (let r = 0; r < N; r++) {
+                const i = r * N + c2;
+                if (!grid[i] && (cand[i] & mb)) spots.push(i);
+              }
+              if (spots.length !== 2) continue;      // 强链：恰好两处候选
+              const a = spots[0];
+              const bc = spots[1];
+              if (ROW[a] !== R && ROW[bc] !== R) continue;
+              // A 必须落在行 R 上
+              let A = -1;
+              let Bc = -1;
+              if (ROW[a] === R) { A = a; Bc = bc; } else { A = bc; Bc = a; }
+              if (C === COL[A]) continue;            // A 已在列 C 上，考察格会重合
+
+              // 强链两格要么同在宫内，要么同在宫外
+              const linkInside = boxCols(b).indexOf(c2) >= 0;
+              const bcInside = boxRows(b).indexOf(ROW[Bc]) >= 0;
+              if (linkInside !== bcInside) continue;
+
+              const t = ROW[Bc] * N + C;
+              if (grid[t] || !(cand[t] & mb)) continue;
+
+              return baseStep('empty-rectangle', {
+                focusCell: t,
+                focusDigit: d,
+                cells: inBox.concat([A, Bc, t]),
+                units: [18 + b, R, C],
+                eliminations: [{ cell: t, digit: d }],
+                marks: inBox.map((i) => ({ cell: i, digit: d }))
+                  .concat([{ cell: A, digit: d }, { cell: Bc, digit: d }, { cell: t, digit: d }]),
+                detail: { box: b, digit: d, row: R, col: C, A: A, Bc: Bc, target: t },
+              });
+            }
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  register({
+    id: 'empty-rectangle',
+    name: '空矩形',
+    alias: ['Empty Rectangle', 'ER', 'Rectangle Elimination'],
+    level: 5,
+    category: '专家',
+    order: 45,
+    tagline: '宫里的数字候选挤在两行两列内，借一条强链把宫外某格也排除掉。',
+    principle:
+      '宫 B 里数字 d 的候选全部落在「宫内某一行 R ∪ 某一列 C」之内，剩下 4 格不含 d。再找一条强链：某列里 d 的候选恰好只有 A、Bc 两格，且 A 落在行 R 上。于是 (行 Bc × 列 C) 这一格不可能是 d——反证：设它取 d，它挤掉了行 R 内的另一处 d 候选，而强链 A 与它同区，逼得 Bc 占据它已占的列，矛盾。',
+    howto: ['看某宫里某数字的候选是不是全挤在两行或两列之内；', '找一条强链：该数字在某列恰好只有两个候选；', '确认强链有一端落在宫内的行上；', '两者的「行列」交叉格就是被排除的目标。'],
+    pitfalls:
+      '强链两格必须同在宫内或同在宫外，一内一外的混合配置会让行与列构不成封闭区域，此时结论不成立。',
+    find(state) {
+      return findEmptyRectangle(state);
+    },
+  });
+  /**
    * 依赖「题目唯一解」这个前提：若第四格取了三数组里的某个数，整盘就能重排出第二组解。
    * 几何条件是四格恰好落在两个宫内——跨四个宫时推导不成立。
    */

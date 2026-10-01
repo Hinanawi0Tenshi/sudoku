@@ -60,6 +60,16 @@ async function pool(items, limit, fn) {
   console.log('数独 · 线上校验  →  ' + BASE);
   console.log('本地 ' + files.length + ' 个站点文件，逐个比对 md5（请求均加了时间戳，绕开边缘缓存）\n');
 
+  // 有人（或另一个 agent）正在写代码时发布，会拍到一个写了一半的快照。
+  // 单个文件写入只要几十毫秒，很容易刚好卡在打包和写盘之间，事后只能靠这条比对发现。
+  const newest = Math.max(...files.map((rel) => fs.statSync(path.join(ROOT, rel)).mtimeMs));
+  const ageS = (Date.now() - newest) / 1000;
+  if (ageS < 30) {
+    console.log('注意：最近 ' + ageS.toFixed(0) + ' 秒内还有站点文件被改动。');
+    console.log('      如果此刻有另一个 agent 正在写代码，这次发布很可能只拍到了中间状态——');
+    console.log('      等它停下来，再发布一次、再校验。\n');
+  }
+
   const rows = [];
   await pool(files, CONCURRENCY, async (rel) => {
     const local = fs.readFileSync(path.join(ROOT, rel));

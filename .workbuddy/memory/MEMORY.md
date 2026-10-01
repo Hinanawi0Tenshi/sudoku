@@ -6,6 +6,8 @@
 - 发布方式：静态托管，同目录重发＝原地覆盖，链接不变。`appName`/`domainPrefix` 仅首次生效，
   `entryHtml` 不要传。工具 `workbuddy_sites_deploy` 是延迟加载的，先 ToolSearch 再 DeferExecuteTool。
 - 发布后必须跑 `node tests/verify-live.js` 校验，别拿"发布成功"当结论。
+- **有另一个 agent 在写代码时不要发布**：打包只要一两秒，会拍到中间状态，而工具照样返回"发布成功"。
+  先确认源码连续 15 秒无改动再发；撞上了就等静止后重发，不要反复重发追移动靶。
 - 完整手册：`.workbuddy/skills/sudoku-deploy/SKILL.md`
 
 ## 红线：这个项目目录会整个上传到公网
