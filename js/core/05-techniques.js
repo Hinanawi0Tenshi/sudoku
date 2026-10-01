@@ -1042,6 +1042,186 @@
       return findAlsPlacement(state);
     },
   });
+  /* ==================== L5 · 假设与传播 ==================== */
+
+  /**
+   * 二元蕴含传播。设若干格已定为真，只用最基础的五条规则往下推：
+   *   on(i,v) 为真 → 同格其余候选作废、关联格里 v 删掉；某格候选清空即矛盾。
+   *   off(i,v) 为假 → 若原盘面里 i 本来就只剩另一个候选，它为真；
+   *                 若原盘面里某区域的 v 本来就只在另两格，它为真；无处安放即矛盾。
+   * 返回 null 代表推出矛盾（假设不成立）；否则返回 on / off 两个掩码数组。
+   *
+   * 关键：「只剩一个」「只剩两处」这类判定一律查原盘面 cand，不查传播途中的中间态。
+   * 中间态里候选被删，往往只是某个假设成立的副作用，并不代表这格已经定死——
+   * 照中间态判真会把合法假设误判成矛盾，试数就会删掉本来正确的候选。
+   */
+  function propagate(grid, cand, seeds, budget) {
+    const on = new Int32Array(B.CELL_COUNT);
+    const off = new Int32Array(B.CELL_COUNT);
+    const c2 = Int32Array.from(cand);
+    const queue = [];
+
+    const put = (i, d, v) => {
+      const mb = bit(d);
+      if ((v ? off : on)[i] & mb) return false;   // 同一候选既真又假
+      (v ? on : off)[i] |= mb;
+      if (v) {
+        off[i] |= cand[i] & ~mb;                 // 同格其余候选：按原盘面判假
+        c2[i] &= mb;
+        for (const p of B.PEERS[i]) {
+          if (!(c2[p] & mb)) continue;
+          c2[p] &= ~mb;
+          if (!c2[p]) return false;
+          queue.push([p, d, 0]);
+        }
+      } else {
+        c2[i] &= ~mb;
+        if (!c2[i]) return false;
+        // 只有原盘面里本来就只剩这一个候选时，才轮得到它必为真
+        if (popcount(cand[i]) === 1) queue.push([i, cand[i], 1]);
+        for (const u of B.UNITS_OF[i]) {
+          let n = 0;
+          let last = -1;
+          for (const k of B.UNITS[u]) if (cand[k] & mb) { n++; last = k; }
+          for (const k of B.UNITS[u]) {
+            n++;
+            if (k !== i) last = k;
+          }
+          if (n === 0) return false;             // 原盘面里这个数只剩 i 一处，i 为假即矛盾
+          if (n === 2 && last >= 0) queue.push([last, d, 2]);
+        }
+      }
+      return true;
+    };
+
+    for (const s of seeds) if (!put(s[0], s[1], 1)) return null;
+    const cap = budget || 3000;
+    let steps = 0;
+    while (queue.length) {
+      if (++steps > cap) break;
+      const [i, d, kind] = queue.pop();
+      if (kind === 0) { if (!put(i, d, 0)) return null; }
+      else { if (!put(i, d, 1)) return null; }
+    }
+    return { on: on, off: off };
+  }
+
+  /** 候选数少的格子链最短、最容易出结论，试数时优先挑它们 */
+  function guessHubs(grid, cand, minCount) {
+    const out = [];
+    for (let i = 0; i < B.CELL_COUNT; i++) {
+      if (grid[i]) continue;
+      const n = popcount(cand[i]);
+      if (n >= minCount) out.push([i, n]);
+    }
+    out.sort((a, b) => a[1] - b[1]);
+    return out.map((x) => x[0]);
+  }
+
+  /**
+   * 试数：逐个假设某格取某个数，只用基础规则往下推，推出矛盾就说明这个假设不成立，
+   * 于是这个候选被排除。候选数少的格子先试——链短、矛盾出得快。
+   */
+  function findTrial(state) {
+    const { grid, cand } = state;
+    for (const c of guessHubs(grid, cand, 2)) {
+      for (const v of digitsOf(cand[c])) {
+        if (propagate(grid, cand, [[c, v]]) !== null) continue;
+        const elims = [{ cell: c, digit: v }];
+        return baseStep('trial', {
+          focusCell: c,
+          focusDigit: v,
+          cells: [c],
+          units: B.UNITS_OF[c],
+          eliminations: elims,
+          marks: [{ cell: c, digit: v }],
+          detail: { hub: c, tried: v, candidates: digitsOf(cand[c]) },
+        });
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 组合链：挑一个候选数不少于 3 的格 C，对它的每个候选各假设一次，各推到底，
+   * 再把所有分支的结论取交集——只要某个候选在每一条分支里都被判为假，它一定为假。
+   * 某条分支自己就推出矛盾时，那条分支的前提直接否掉，也算一条结论。
+   * 双向矩形是同一套机制换个观察角度：从中间格同时向两个方向出发，两条路最终汇合，形如矩形。
+   */
+  function findMultipleChain(state) {
+    const { grid, cand } = state;
+    for (const c of guessHubs(grid, cand, 3)) {
+      const ds = digitsOf(cand[c]);
+      let commonOff = null;
+      let alive = 0;
+      const dead = [];
+
+      for (const v of ds) {
+        const r = propagate(grid, cand, [[c, v]]);
+        if (!r) { dead.push(v); continue; }
+        alive++;
+        if (commonOff === null) commonOff = Int32Array.from(r.off);
+        else for (let i = 0; i < B.CELL_COUNT; i++) commonOff[i] &= r.off[i];
+      }
+
+      const elims = dead.map((d) => ({ cell: c, digit: d }));
+      if (commonOff && alive >= 2) {
+        for (let i = 0; i < B.CELL_COUNT; i++) {
+          if (i === c || grid[i]) continue;
+          const m = commonOff[i] & cand[i];
+          for (let d = 1; d <= N; d++) if (m & bit(d)) elims.push({ cell: i, digit: d });
+        }
+      }
+      if (!elims.length) continue;
+
+      return baseStep('multiple-forcing-chain', {
+        focusCell: c,
+        focusDigit: elims[0].digit,
+        cells: [c].concat(elims.map((x) => x.cell)),
+        units: B.UNITS_OF[c],
+        eliminations: elims,
+        marks: elims.map((x) => ({ cell: x.cell, digit: x.digit })),
+        detail: { hub: c, candidates: ds, dead: dead },
+      });
+    }
+    return null;
+  }
+
+  register({
+    id: 'trial',
+    name: '试数',
+    alias: ['Trial and Error', 'Tricking', '分岔试错'],
+    level: 5,
+    category: '专家',
+    order: 54,
+    tagline: '假设某格取某个数往下推，推出矛盾就说明这个假设不成立。',
+    principle:
+      '挑一个格，逐个假设它取某个候选，然后只用最基础的规则往下推——定真则同格其余候选作废；某格只剩一个候选则它必为真；某个区域里某数只剩一处则无处安放、矛盾。如果整盘推出矛盾，说明矛盾来自这个错误假设本身，于是这个候选一定不成立。这一族不需要题面唯一解。',
+    howto: ['挑候选数最少的格子，链最短、矛盾出得最快；', '逐个假设它取某个候选；', '只用基础规则往下推；', '一旦推出矛盾，就把这个候选删掉。'],
+    pitfalls:
+      '手工做很耗时，卡住时用提示更快。它是兜底手段，前面那些技巧都做完了才轮到它。',
+    find(state) {
+      return findTrial(state);
+    },
+  });
+
+  register({
+    id: 'multiple-forcing-chain',
+    name: '组合链',
+    alias: ['Multiple Forcing Chains', 'MFC', '双向矩形'],
+    level: 5,
+    category: '专家',
+    order: 53,
+    tagline: '对一个多候选的格逐个假设，取所有分支的公共结论。',
+    principle:
+      '挑候选数不少于 3 的格 C，对它的每个候选各假设一次「C 就是它」，每次只用基础规则往下推，然后把所有分支的结论取交集。只要某个候选在每一条分支里都被判为假，它一定为假；某条分支自己就推出矛盾时，那条分支的前提直接被否掉，同样算结论。双向矩形是同一套机制换个观察角度——从中间格同时向两个方向出发，两条路最终汇合，形如矩形。',
+    howto: ['挑一个候选不少于 3 的格，把它当枢纽；', '逐个假设它取某个候选，各推到底；', '把所有分支的结论取交集；', '交集里为假的候选删掉。'],
+    pitfalls:
+      '必须覆盖枢纽的每一个候选，漏掉任何一条分支交集就不成立了。这一族不需要题面唯一解，但代价高，引擎有步数上限兜着。',
+    find(state) {
+      return findMultipleChain(state);
+    },
+  });
   /**
    * 依赖「题目唯一解」这个前提：若第四格取了三数组里的某个数，整盘就能重排出第二组解。
    * 几何条件是四格恰好落在两个宫内——跨四个宫时推导不成立。
