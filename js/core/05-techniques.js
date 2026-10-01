@@ -1042,6 +1042,128 @@
       return findAlsPlacement(state);
     },
   });
+  /**
+   * 区域强制链。对某个区域 U 里的某个数字 d：U 内所有能放 d 的格子，d 必须落在其中一处。
+   * 对其中每一处分别假设 d 就在这里，各推到底；只要某个候选在所有分支里都被判为假，
+   * 它一定为假。与数字强制链的区别在于前提集合不同：
+   * 数字强制链的前提是单个候选，区域强制链的前提是这个区域的这个数在所有位置里必有一个成立。
+   */
+  function findUnitForcingChain(state) {
+    const { grid, cand } = state;
+    for (let u = 0; u < UNITS.length; u++) {
+      for (let d = 1; d <= N; d++) {
+        const mb = bit(d);
+        const positions = Array.prototype.filter.call(UNITS[u], (i) => !grid[i] && (cand[i] & mb));
+        if (positions.length < 2) continue;
+
+        let commonOff = null;
+        for (const p of positions) {
+          const r = propagate(grid, cand, [[p, d]]);
+          if (!r) continue;
+          if (commonOff === null) commonOff = Int32Array.from(r.off);
+          else for (let i = 0; i < B.CELL_COUNT; i++) commonOff[i] &= r.off[i];
+        }
+        if (!commonOff) continue;
+
+        const elims = [];
+        for (let i = 0; i < B.CELL_COUNT; i++) {
+          if (grid[i]) continue;
+          if (positions.indexOf(i) >= 0) continue;
+          const m = commonOff[i] & cand[i];
+          for (let k = 1; k <= N; k++) if (m & bit(k)) elims.push({ cell: i, digit: k });
+        }
+        if (!elims.length) continue;
+
+        return baseStep('unit-forcing-chain', {
+          focusCell: positions[0],
+          focusDigit: d,
+          cells: positions.concat(elims.map((x) => x.cell)),
+          units: [u],
+          eliminations: elims,
+          marks: positions.map((x) => ({ cell: x, digit: d })),
+          detail: { unit: u, digit: d, positions: positions },
+        });
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 单元格强制链。对某个格子 X：X 必有一个候选成立。
+   * 对其中每个候选分别假设它成立，各推到底；只要某个候选在所有分支里都被判为假，
+   * 它一定为假。这是唯一性最强的一类链：前提把整格的取值全部覆盖，推不动就说明前提矛盾。
+   */
+  function findCellForcingChain(state) {
+    const { grid, cand } = state;
+    for (let x = 0; x < B.CELL_COUNT; x++) {
+      if (grid[x] || popcount(cand[x]) < 2) continue;
+      const ds = digitsOf(cand[x]);
+
+      let commonOff = null;
+      for (const v of ds) {
+        const r = propagate(grid, cand, [[x, v]]);
+        if (!r) continue;
+        if (commonOff === null) commonOff = Int32Array.from(r.off);
+        else for (let i = 0; i < B.CELL_COUNT; i++) commonOff[i] &= r.off[i];
+      }
+      if (!commonOff) continue;
+
+      const elims = [];
+      for (let i = 0; i < B.CELL_COUNT; i++) {
+        if (grid[i] || i === x) continue;
+        const m = commonOff[i] & cand[i];
+        for (let k = 1; k <= N; k++) if (m & bit(k)) elims.push({ cell: i, digit: k });
+      }
+      if (!elims.length) continue;
+
+      return baseStep('cell-forcing-chain', {
+        focusCell: x,
+        focusDigit: ds[0],
+        cells: [x].concat(elims.map((v) => v.cell)),
+        units: B.UNITS_OF[x],
+        eliminations: elims,
+        marks: ds.map((v) => ({ cell: x, digit: v })),
+        detail: { cell: x, candidates: ds },
+      });
+    }
+    return null;
+  }
+
+  register({
+    id: 'unit-forcing-chain',
+    name: '区域强制链',
+    alias: ['Unit Forcing Chains', '单位强制链'],
+    level: 5,
+    category: '专家',
+    order: 52,
+    tagline: '一个区域里的某个数必落在某一格 → 逐处假设，取公共结论。',
+    principle:
+      '某个区域里能放数字 d 的格子有若干处，d 必定落在其中一处。对每一处分别假设「d 就在这里」，只用基础规则往下推，再把所有分支的结论取交集。只要某个候选在每一条分支里都被判为假，它一定为假。与数字强制链不同，它的前提覆盖的是「这个区域这个数的所有位置」。',
+    howto: ['挑一个区域与一个数字，列出区域内所有能放它的空格；', '逐处假设 d 在这里，各推到底；', '取所有分支的公共结论；', '交集里为假的候选删掉。'],
+    pitfalls:
+      '前提必须覆盖全部位置，漏掉一处交集就不成立了。某一处假设自身就推出矛盾时，说明 d 在那一处放不下，这本身就是结论。',
+    find(state) {
+      return findUnitForcingChain(state);
+    },
+  });
+
+  register({
+    id: 'cell-forcing-chain',
+    name: '单元格强制链',
+    alias: ['Cell Forcing Chains'],
+    level: 5,
+    category: '专家',
+    order: 51,
+    tagline: '一个格子必有一个候选成立 → 逐个假设，取公共结论。',
+    principle:
+      '某个格子必有一个候选成立。对它的每个候选分别假设它成立，只用基础规则往下推，再把所有分支取交集。只要某个候选在每一条分支里都被判为假，它一定为假。这是前提最紧的一类链：前提把整格的取值全部覆盖，因此它常常能直接逼出别处的结论。',
+    howto: ['挑一个空格；', '逐个假设它取某个候选，各推到底；', '取所有分支的公共结论；', '交集里为假的候选删掉。'],
+    pitfalls:
+      '候选少于 2 个时这个格已经定了，不必走链。某一处假设自身就矛盾时说明该格不能取那个数，同样是有效结论。',
+    find(state) {
+      return findCellForcingChain(state);
+    },
+  });
   /* ==================== L5 · 假设与传播 ==================== */
 
   /**
