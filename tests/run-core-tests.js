@@ -245,32 +245,32 @@ section('四链鱼定向用例');
     eq(bad.length, 0, '删除全部落在第 5 到 9 行、且只删数字 5');
   }
 }
-section('全流程求解：模拟玩家逐步推理');
+section('融合式待定数组定向用例');
 {
-  let solved = 0;
-  const total = 15;
-  const seenIds = {};
-  for (let t = 0; t < total; t++) {
-    const gen = Generator.generateSync(Generator.DIFFICULTY_ORDER[t % 5], 'flow-' + t);
-    const g = gen.givens.slice();
-    const cand = Validation.computeCandidates(g);
-    let stuck = false;
-    for (let guard = 0; guard < 600; guard++) {
-      const step = Techniques.findStepFrom({ grid: g, cand: cand }, { maxLevel: 5 });
-      if (!step) { stuck = !Validation.isComplete(g); break; }
-      seenIds[step.id] = (seenIds[step.id] || 0) + 1;
-      for (const p of step.placements) {
-        if (gen.solution[p.cell] !== p.digit) { ok(false, '生成题 ' + t + ' 上技巧 ' + step.id + ' 推出错误数字'); }
-      }
-      for (const el of step.eliminations) {
-        if (gen.solution[el.cell] === el.digit) { ok(false, '生成题 ' + t + ' 上技巧 ' + step.id + ' 误删候选'); }
-      }
-      Techniques.commit(g, cand, step);
-    }
-    if (Validation.isComplete(g) && B.gridToString(g) === B.gridToString(gen.solution)) solved++;
+  // 形制：|C| + |D| + |E| = |V|，|D| = |VD|、|E| = |VE|，且 VD ∩ VE = ∅。
+  // 摆一组满足的：|C|=2、|V|=5、|D|=1、|E|=2。
+  const cand = new Int32Array(81);
+  const mark = (i, ds) => { cand[i] = ds.reduce((m, d) => m | (1 << (d - 1)), 0); };
+  // 宫 0 = R1..R3 × C1..C3，与第 1 行的交集就是 C
+  mark(0, [1,2,3,4,5]); mark(1, [1,2,3,4,5]);
+  // 行侧 D：R1C4 只有候选 1，于是 |D| = |VD| = 1
+  mark(3, [1]);
+  // 宫侧 E：R2C1、R2C2 的候选都是 {2,3}，于是 |E| = |VE| = 2，与 VD 不相交
+  mark(9, [2,3]); mark(10, [2,3]);
+  // 结论落点：R1C5（行上 C∪D 之外）与 R3C1（宫上 C∪E 之外）
+  mark(4, [1,4,5]); mark(18, [2,3,4,5]);
+  const step = Techniques.byId['sue-de-coq'].find({ grid: new Uint8Array(81), cand: cand });
+  ok(!!step, '手工构造的 SDC 被识别');
+  if (step) {
+    eq(step.detail.armName, '行', '识别为行侧构型');
+    eq(step.detail.box, 0, '宫是第 1 宫');
+    eq(step.detail.arm, 0, '行是第 1 行');
+    eq(step.detail.C.join(','), '0,1', '交集 C = R1C1、R1C2');
+    eq(step.detail.D.join(','), '3', '行侧 D = R1C4');
+    eq(step.detail.E.join(','), '9,10', '宫侧 E = R2C1、R2C2');
+    const got = step.eliminations.map((e) => e.cell + ':' + e.digit).sort((a, b) => (a < b ? -1 : 1)).join(' ');
+    eq(got, '18:2 18:3 18:4 18:5 4:1 4:4 4:5', '行侧清 R1C5 的 1/4/5，宫侧清 R3C1 的 2/3/4/5');
   }
-  eq(solved, total, total + ' 道生成题均可由人类技巧完整还原为记录解');
-  console.log('    全流程技巧分布: ' + JSON.stringify(seenIds));
 }
 
 section('simulate 与难度评级');

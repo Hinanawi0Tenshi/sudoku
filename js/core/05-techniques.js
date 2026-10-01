@@ -710,6 +710,128 @@
   });
 
 
+  /** arr 里所有大小落在 [lo, hi] 的子集 */
+  function subsets(arr, lo, hi) {
+    const out = [];
+    const n = arr.length;
+    for (let mask = 1; mask < (1 << n); mask++) {
+      let k = 0;
+      for (let i = 0; i < n; i++) if (mask & (1 << i)) k++;
+      if (k < lo || k > hi) continue;
+      const s = [];
+      for (let i = 0; i < n; i++) if (mask & (1 << i)) s.push(arr[i]);
+      out.push(s);
+    }
+    return out;
+  }
+
+  /**
+   * 融合式待定数组。英文原名 Sue de Coq（SudokuWiki 写作融合式待定数组），
+   * 最初叫 Two-Sector Disjoint Subsets，名字里的「de Coq」指行侧与宫侧的数字集不相交。
+   *
+   * 形制：宫 B 与行（或列）R 的交集里有 2 或 3 个空格组成 C；行侧另有若干格 D（不在 B 内），
+   * 宫侧另有若干格 E（不在 R 内），它们的候选都取自 C 的候选并集 V，且 VD ∩ VE = ∅。
+   * 这里只做 n=0 的标准型：|C| + |D| + |E| = |V|，并且 |D| = |VD|、|E| = |VE|，
+   * 也就是两侧各自恰好用自己的格子数把数字占满。
+   *
+   * 计数推理：V 有 |V| 个数字而 C 只有 |C| 个格子，剩下的 |V| - |C| 个必须落在 D ∪ E 上；
+   * 两侧数字不相交，于是这 |V| - |C| 个恰好分成 VD 与 VE 两堆，
+   * 而 |VD| = |D|、|VE| = |E| 正好让 D 占满 VD、E 占满 VE。
+   * 于是行 R 上位于 C ∪ D 之外的格，既放不下 VD（D 已占满），也放不下 V\VE 里剩下那堆（C 已占满），
+   * 只能取 V 之外的数字；宫侧同理。
+   */
+  function findSueDeCoq(state) {
+    const { grid, cand } = state;
+    const openOf = (cells) => cells.filter((i) => !grid[i] && cand[i]);
+    const unionOf = (cells) => cells.reduce((m, i) => m | cand[i], 0);
+    const elimsIn = (cells, mask) => {
+      const out = [];
+      for (const i of cells) {
+        const m = cand[i] & mask;
+        for (let d = 1; d <= N; d++) if (m & bit(d)) out.push({ cell: i, digit: d });
+      }
+      return out;
+    };
+
+    for (let side = 0; side < 2; side++) {
+      const armUnits = side === 0 ? B.UNITS.slice(0, 9) : B.UNITS.slice(9, 18);
+      const armName = side === 0 ? '行' : '列';
+
+      for (let box = 0; box < 9; box++) {
+        const boxCells = B.UNITS[18 + box];
+        const boxSet = new Set(boxCells);
+
+        for (let arm = 0; arm < 9; arm++) {
+          const armCells = armUnits[arm];
+          const armSet = new Set(armCells);
+          const cross = openOf(boxCells.filter((i) => armSet.has(i)));
+          if (cross.length < 2) continue;
+          const armOpen = openOf(armCells.filter((i) => !boxSet.has(i)));
+          const boxRest = openOf(boxCells.filter((i) => !armSet.has(i)));
+
+          for (const C of subsets(cross, 2, 3)) {
+            const V = unionOf(C);
+            if (popcount(V) < C.length + 2) continue;
+            const need = popcount(V) - C.length;
+            if (need < 2) continue;
+
+            const D0 = armOpen.filter((i) => (cand[i] & ~V) === 0);
+            const E0 = boxRest.filter((i) => (cand[i] & ~V) === 0);
+            if (D0.length > 4 || E0.length > 4) continue;
+
+            for (const D of subsets(D0, 1, need - 1)) {
+              const VD = unionOf(D);
+              if (popcount(VD) !== D.length) continue;   // D 必须自己把 VD 占满
+              const wantE = need - D.length;
+              if (wantE < 1 || wantE > E0.length) continue;
+              for (const E of subsets(E0, wantE, wantE)) {
+                const VE = unionOf(E);
+                if (popcount(VE) !== E.length) continue;
+                if (VD & VE) continue;                    // 要害：两侧数字必须不相交
+
+                const cSet = new Set(C);
+                const dSet = new Set(D);
+                const eSet = new Set(E);
+                const elims = []
+                  .concat(elimsIn(armOpen.filter((i) => !cSet.has(i) && !dSet.has(i)), V & ~VE))
+                  .concat(elimsIn(boxRest.filter((i) => !cSet.has(i) && !eSet.has(i)), V & ~VD));
+                if (!elims.length) continue;
+
+                return baseStep('sue-de-coq', {
+                  focusCell: C[0],
+                  focusDigit: 0,
+                  cells: C.concat(D, E).concat(elims.map((x) => x.cell)),
+                  units: [arm, 18 + box],
+                  eliminations: elims,
+                  marks: C.concat(D, E).flatMap((i) => digitsOf(cand[i]).map((v) => ({ cell: i, digit: v }))),
+                  detail: { C: C, D: D, E: E, V: V, VD: VD, VE: VE, box: box, arm: arm, side: side, armName: armName },
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  register({
+    id: 'sue-de-coq',
+    name: '融合式待定数组',
+    alias: ['Sue de Coq', 'SDC', 'Two-Sector Disjoint Subsets'],
+    level: 5,
+    category: '专家',
+    order: 51,
+    tagline: '宫与行（或列）的交集里挤着几个数字，两侧各自有数接应 → 两侧之外的位置全清。',
+    principle:
+      '宫 B 与行 R 的交集里有 2 到 3 个空格 C，它们的候选并集是 V。行侧另有 D（不在宫内）、宫侧另有 E（不在行内），两边候选都取自 V，且互不相交。当 |C|+|D|+|E| = |V| 且两侧各自用自己的格子数占满数字时，V 里分给 D、E 之外的那部分数字只能挤在 C 里。于是行 R 上位于 C 与 D 之外的格子再也放不下 V 中的任何数字，宫侧同理。名字里的 de Coq 就是「分开」——两侧数字必须不相交，否则推导不成立。',
+    howto: ['找宫与行/列的交集，看里面的 2 到 3 个空格，它们的候选并集就是 V；', '在行侧（宫外）与宫侧（行外）各找若干格，候选全部落在 V 里；', '确认两侧候选不相交，且 |C|+|D|+|E| = |V|；', '删掉行上 C 与 D 之外各格里的 V 中数字，以及宫上 C 与 E 之外各格里的 V 中数字。'],
+    pitfalls:
+      '两侧数字一旦有交集就整条作废——那不再是「分开」的两堆。本作只实现 n=0 的标准型：两侧各自恰好用格子数占满数字；带额外候选的推广型容易误删，不收录。',
+    find(state) {
+      return findSueDeCoq(state);
+    },
+  });
   /**
    * 依赖「题目唯一解」这个前提：若第四格取了三数组里的某个数，整盘就能重排出第二组解。
    * 几何条件是四格恰好落在两个宫内——跨四个宫时推导不成立。
