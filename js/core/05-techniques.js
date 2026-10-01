@@ -1523,6 +1523,110 @@
       return findEmptyRectangle(state);
     },
   });
+  /* ==================== 带鳍鱼 ==================== */
+
+  /**
+   * 带鳍鱼（Finny Fish）。设数字 d，n 条基础线 D、n 条覆盖线 S（都是行或列）。
+   *   BC = D 内所有 d 的候选格；
+   *   鳍 = BC 去掉所有被 S 覆盖的部分；
+   *   可删集 = 落在 S 内、不属于 BC、仍是 d 候选、且与每一个鳍同区域的格。
+   * 计数论证：n 条 D 各恰有一个 d，这些 d 全被 S 覆盖，同一个 S 容不下两个 d，
+   * 于是 n 条 S 与 n 个 d 一一对应，S 里的 d 必是 base candidate。
+   * 若某个鳍为真，则与它同区域的格不能是 d——两组结论取交集即可删。
+   *
+   * 与普通鱼形的区别：普通鱼形里 D 内不在 S 的格一律可删（它们必然是空或被排除），
+   * 带鳍时这些格恰恰是鳍的候选位置，一律不能删，鳍本身也永远不能删。
+   */
+  function findFinnyFish(state, size) {
+    const { grid, cand } = state;
+
+    const run = (baseIsRows) => {
+      const at = (b, ci) => (baseIsRows ? b * N + ci : ci * N + b);
+
+      for (let d = 1; d <= N; d++) {
+        const mb = bit(d);
+        for (const bases of combos(N, size)) {
+          // 基础线内的全部 d 候选
+          const bc = [];
+          const perBase = [];
+          let anyEmpty = false;
+          for (const b of bases) {
+            const cols = [];
+            for (let ci = 0; ci < N; ci++) {
+              const i = at(b, ci);
+              if (!grid[i] && (cand[i] & mb)) { cols.push(ci); bc.push(i); }
+            }
+            if (!cols.length) anyEmpty = true;
+            perBase.push(cols);
+          }
+          if (anyEmpty) continue;                 // 该基础线不提供信息
+
+          // 候选列的并集，覆盖线要从里面挑 size 条
+          const unionCols = [];
+          for (const cols of perBase) for (const ci of cols) if (unionCols.indexOf(ci) < 0) unionCols.push(ci);
+          if (unionCols.length < size) continue;
+
+          for (const cover of combos(unionCols.length, size)) {
+            const coverCols = cover.map((k) => unionCols[k]);
+            // 每条基础线至少要在覆盖线里有一个候选
+            if (!perBase.every((cols) => cols.some((ci) => coverCols.indexOf(ci) >= 0))) continue;
+
+            // 鳍 = 基础线候选里、不被任何覆盖线覆盖的格
+            const fins = bc.filter((i) => {
+              const ci = baseIsRows ? COL[i] : ROW[i];
+              return coverCols.indexOf(ci) < 0;
+            });
+            if (!fins.length) continue;           // 没鳍就不是带鳍鱼，交给普通鱼形
+
+            const elims = [];
+            for (const ci of coverCols) {
+              for (let k = 0; k < N; k++) {
+                const i = baseIsRows ? k * N + ci : ci * N + k;
+                if (grid[i] || !(cand[i] & mb)) continue;
+                if (bc.indexOf(i) >= 0) continue;          // base candidate 不可删
+                if (!fins.every((f) => sharesUnit(f, i))) continue;   // 须与每一个鳍同区域
+                elims.push({ cell: i, digit: d });
+              }
+            }
+            if (!elims.length) continue;
+
+            return baseStep('finny-fish', {
+              focusCell: fins[0],
+              focusDigit: d,
+              cells: bc.concat(fins).concat(elims.map((x) => x.cell)),
+              units: (baseIsRows ? bases : bases.map((b) => N + b)).concat(
+                baseIsRows ? coverCols.map((c) => N + c) : coverCols
+              ),
+              eliminations: elims,
+              marks: bc.map((x) => ({ cell: x, digit: d })),
+              detail: { digit: d, bases: bases, cover: coverCols, fins: fins, baseIsRows: baseIsRows, size: size },
+            });
+          }
+        }
+      }
+      return null;
+    };
+
+    return run(true) || run(false);
+  }
+
+  register({
+    id: 'finny-fish',
+    name: '带鳍鱼',
+    alias: ['Finny Fish', 'Finned X-Wing', 'Finned Swordfish', '带鳍二阶鱼', '带鳍三阶鱼'],
+    level: 4,
+    category: '高级',
+    order: 43,
+    tagline: '鱼形之外多出一个「鳍」格，靠它把删除范围传出去。',
+    principle:
+      '设数字 d，n 条基础线 D、n 条覆盖线 S。BC 是 D 内所有 d 的候选格；鳍是 BC 去掉所有被 S 覆盖的部分。计数上，n 条 D 各恰有一个 d，这些 d 全被 S 覆盖，同一个 S 容不下两个 d，于是 n 条 S 与 n 个 d 一一对应，S 里的 d 必是 base candidate。剩下落在 S 内、不是 base candidate、且与每一个鳍同区域的格——若某鳍为真则这些格都不能是 d，故可删。',
+    howto: ['固定数字 d，挑 n 条基础线与 n 条覆盖线；', '找出基础线内所有 d 候选格，减去被覆盖线覆盖的，剩下的就是鳍；', '在覆盖线内找那些与每一个鳍都同区域的候选格；', '它们就是可以删掉的。'],
+    pitfalls:
+      '带鳍时基础线内不在覆盖线上的格一律不能删——普通鱼形会删它们，但那正是鳍可能落的位置。鳍本身也永远不能删。没有鳍时这不是带鳍鱼，交给普通鱼形处理。',
+    find(state) {
+      return findFinnyFish(state, 2);
+    },
+  });
   /**
    * 依赖「题目唯一解」这个前提：若第四格取了三数组里的某个数，整盘就能重排出第二组解。
    * 几何条件是四格恰好落在两个宫内——跨四个宫时推导不成立。

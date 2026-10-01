@@ -245,6 +245,23 @@ section('四链鱼定向用例');
     eq(bad.length, 0, '删除全部落在第 5 到 9 行、且只删数字 5');
   }
 }
+section('带鳍鱼定向用例');
+{
+  // D=第1、4行，S=第1、9列，d=1。r1 的 1 只剩 c9（缺角），r4 是 {c1,c8,c9}，
+  // 于是 c8 落进鳍；与鳍同区域又在覆盖线内的 r5c9 因此不能是 1。
+  // 覆盖线必须从候选列并集里「挑」size 条，不能要求并集正好等于 size——
+  // 并集多出来的那几条正是鳍所在的列。
+  const g = B.stringToGrid('.......8.|....1....|.1.......|..4......|.........|...1.....|.........|......1..|.........');
+  const cand = Validation.computeCandidates(g);
+  const step = Techniques.byId['finny-fish'].find({ grid: g, cand: cand });
+  ok(!!step, '手工构造的带鳍二阶鱼被识别');
+  if (step) {
+    eq(step.detail.bases.join(','), '0,3', '基础行是第 1、4 行');
+    eq(step.detail.cover.join(','), '8,0', '覆盖列内部按候选出现顺序，不保证升序');
+    eq(step.detail.fins.join(','), '34', '鳍是 R4C8');
+    eq(JSON.stringify(step.eliminations), JSON.stringify([{ cell: 44, digit: 1 }]), '只删 R5C9 的 1');
+  }
+}
 section('融合式待定数组定向用例');
 {
   // 形制：|C| + |D| + |E| = |V|，|D| = |VD|、|E| = |VE|，且 VD ∩ VE = ∅。
