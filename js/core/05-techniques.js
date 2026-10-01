@@ -832,6 +832,216 @@
       return findSueDeCoq(state);
     },
   });
+  /* ==================== L4 · 链与翼 ==================== */
+
+  /**
+   * W 翼：A={w,x}、B={w,y} 两格共用 w，C={x,y} 且同时看得到 A 与 B。
+   * 反证：设某格 E 含 w 且同时看得到 A、B。A 与 B 都被 E 挡掉 w，只能取 x 与 y；
+   *   C 与 A、B 同区域，于是 x、y 都被占，C 无处可放。矛盾，所以这类格子里不能是 w。
+   * C 必须真的看得到 A 与 B，否则 C 还能从别处取 x 或 y，推导不成立。
+   */
+  function findWWing(state) {
+    const { grid, cand } = state;
+    const bivals = [];
+    for (let i = 0; i < B.CELL_COUNT; i++) if (!grid[i] && popcount(cand[i]) === 2) bivals.push(i);
+    const pair = (i) => digitsOf(cand[i]);
+
+    for (const a of bivals) {
+      for (const b of B.PEERS[a]) {
+        if (b <= a || grid[b] || popcount(cand[b]) !== 2) continue;
+        const pa = pair(a);
+        const pb = pair(b);
+        const shared = pa.filter((v) => pb.includes(v));
+        if (shared.length !== 1) continue;
+        const w = shared[0];
+        const x = pa.find((v) => v !== w);
+        const y = pb.find((v) => v !== w);
+        if (x === y) continue;
+
+        // 第三格必须是 {x,y}，而且真的同时看得到 A 与 B
+        for (const c of B.PEERS[a]) {
+          if (c === b || grid[c] || popcount(cand[c]) !== 2) continue;
+          const pc = pair(c);
+          if (pc.indexOf(x) < 0 || pc.indexOf(y) < 0) continue;
+          if (B.PEERS[b].indexOf(c) < 0) continue;
+
+          const elims = [];
+          for (const t of B.PEERS[a]) {
+            if (t === b || grid[t]) continue;
+            if (B.PEERS[b].indexOf(t) < 0) continue;
+            if (cand[t] & bit(w)) elims.push({ cell: t, digit: w });
+          }
+          if (!elims.length) continue;
+
+          return baseStep('w-wing', {
+            focusCell: a,
+            focusDigit: w,
+            cells: [a, b, c].concat(elims.map((v) => v.cell)),
+            units: [],
+            eliminations: elims,
+            marks: [a, b, c].flatMap((i) => pair(i).map((v) => ({ cell: i, digit: v }))),
+            detail: { a: a, b: b, c: c, w: w, x: x, y: y },
+          });
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * XY 链：双值格串成一条路 C1={d,a1}、C2={a1,a2}、…、Cn={a(n-1),d}，
+   * 相邻两格恰好共用一个数字且同属一个区域。
+   * 反证：设某格 F 含 d 且同时看得到首尾两端。C1 被 F 挡掉 d，只能取 a1；
+   *   a1 被 C1 占走后 C2 只能取 a2；照此推下去 Cn 必为 d，而 Cn 与 F 同区域，矛盾。
+   * 链长上限 5：再长已经罕见到不值得扫，且每多一格误判面就大一分。
+   */
+  function findXyChain(state) {
+    const { grid, cand } = state;
+    const pair = (i) => digitsOf(cand[i]);
+    const MAX = 5;
+
+    for (let i = 0; i < B.CELL_COUNT; i++) {
+      if (grid[i] || popcount(cand[i]) !== 2) continue;
+      for (const d of pair(i)) {
+        const chain = [i];
+        const found = (function step(prev, carried) {
+          if (chain.length >= MAX) return null;
+          for (const nxt of B.PEERS[prev]) {
+            if (chain.indexOf(nxt) >= 0 || grid[nxt] || popcount(cand[nxt]) !== 2) continue;
+            const pn = pair(nxt);
+            if (pn.indexOf(carried) < 0) continue;
+            const other = pn.find((v) => v !== carried);
+            chain.push(nxt);
+            if (other === d) {
+              const head = chain[0];
+              const tail = nxt;
+              const elims = [];
+              for (const t of B.PEERS[head]) {
+                if (t === tail || grid[t]) continue;
+                if (B.PEERS[tail].indexOf(t) < 0) continue;
+                if (cand[t] & bit(d)) elims.push({ cell: t, digit: d });
+              }
+              if (elims.length) {
+                const marks = [];
+                for (const cell of chain) for (const v of pair(cell)) marks.push({ cell: cell, digit: v });
+                return { chain: chain.slice(), elims: elims, marks: marks };
+              }
+            } else {
+              const got = step(nxt, other);
+              if (got) return got;
+            }
+            chain.pop();
+          }
+          return null;
+        })(i, pair(i).find((v) => v !== d));
+        if (found) {
+          return baseStep('xy-chain', {
+            focusCell: found.chain[0],
+            focusDigit: d,
+            cells: found.chain.concat(found.elims.map((v) => v.cell)),
+            units: [],
+            eliminations: found.elims,
+            marks: found.marks,
+            detail: { chain: found.chain, d: d },
+          });
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 裸二元集出数型：同一区域里 N 格，其中 N-1 格的候选恰好是同一个 N-1 元集合 A，
+   * 剩下一格的候选是 A ∪ {e}，恰好多出一个数。
+   * 推理：那 N-1 格构成裸 N-1 数组，把 A 占满了，落单那格只能取 e。
+   * 只有「恰好多一个」才敢这么判；多出两个以上时它未必是 e，推导不成立。
+   */
+  function findAlsPlacement(state) {
+    const { grid, cand } = state;
+    for (let u = 0; u < UNITS.length; u++) {
+      const cells = UNITS[u].filter((i) => !grid[i] && cand[i]);
+      if (cells.length < 2) continue;
+      for (let k = 2; k <= Math.min(cells.length, 5); k++) {
+        for (const C of subsets(cells, k, k)) {
+          if (C.length < 2) continue;
+          const base = C.slice(0, C.length - 1);
+          const odd = C[C.length - 1];
+          const mask = cand[base[0]];
+          if (popcount(mask) !== base.length) continue;
+          if (!base.every((i) => cand[i] === mask)) continue;
+          const extra = cand[odd] & ~mask;
+          if (popcount(extra) !== 1) continue;
+          const e = Math.log2(extra) + 1;
+          return baseStep('almost-locked-set', {
+            focusCell: odd,
+            focusDigit: e,
+            cells: C,
+            units: [u],
+            placements: [{ cell: odd, digit: e }],
+            eliminations: [],
+            marks: base.flatMap((i) => digitsOf(mask).map((v) => ({ cell: i, digit: v })))
+                     .concat([{ cell: odd, digit: e }]),
+            detail: { base: base, odd: odd, mask: mask, extra: extra, unit: u },
+          });
+        }
+      }
+    }
+    return null;
+  }
+
+  register({
+    id: 'w-wing',
+    name: 'W 翼',
+    alias: ['W-Wing'],
+    level: 4,
+    category: '高级',
+    order: 43,
+    tagline: '两格共用一个数，第三格看得到这两格 → 共用的那个数出不来。',
+    principle:
+      'A={w,x}、B={w,y} 两格共用 w，C={x,y} 且同时与 A、B 同区域。反证：若某格 E 含 w 且看得到 A、B，A、B 都被 E 挡掉 w，只能取 x 与 y；C 与它们同区域，x、y 全被占，无处可放。故 E 只能是 w 的否定。',
+    howto: ['找两个双值格 A、B，恰好共用一个数字 w；', '再找一个候选恰是 A 与 B 各自另一个数字的第三格 C；', '确认 C 同时与 A、B 同区域；', '删掉同时看得到 A 与 B 的格子里的 w。'],
+    pitfalls:
+      'C 必须真的看得到 A 和 B。只「候选是 {x,y}」不够——C 若与 A 不同区域，它还能从别处取 x，推导立刻失效。',
+    find(state) {
+      return findWWing(state);
+    },
+  });
+
+  register({
+    id: 'xy-chain',
+    name: 'XY 链',
+    alias: ['XY-Chain', '交替推理链'],
+    level: 5,
+    category: '专家',
+    order: 52,
+    tagline: '一串双值格首尾都含同一个数 → 同时看得到两端的格子里删掉它。',
+    principle:
+      '一串双值格串成路 C1={d,a1}、C2={a1,a2}、…、Cn={a(n-1),d}，相邻两格恰好共用一个数字且同属一个区域。反证：若某格 F 含 d 且看得到首尾两端，C1 被 F 挡掉 d 只能取 a1；a1 被占走后 C2 只能取 a2；逐级推下去 Cn 必为 d，而 Cn 与 F 同区域，矛盾。',
+    howto: ['找一个双值格，定下要消的数字 d 和它携带的另一个数字；', '顺着「与上一格恰好共用一个数字」往下走，每一格都必须与上一格同属一个区域；', '走回 d 就闭合成链；', '删掉同时看得到首尾两端的格子里的 d。'],
+    pitfalls:
+      '链上每一格都必须真的与前后格同区域，只是候选碰巧相同不算——那样「被占走」这一步就不成立。本作把链长限制在 5，再长既罕见又难向人解释。',
+    find(state) {
+      return findXyChain(state);
+    },
+  });
+
+  register({
+    id: 'almost-locked-set',
+    name: '裸二元集（出数型）',
+    alias: ['ALS', 'Almost Locked Set', '裸二元集'],
+    level: 5,
+    category: '专家',
+    order: 53,
+    tagline: '几个格子的候选挤成数组、只多出一个数 → 落单那格就是它。',
+    principle:
+      '同一区域里 N 格，其中 N-1 格的候选恰好是同一个 N-1 元集合 A，剩下一格的候选是 A 再多一个数 e。那 N-1 格构成裸 N-1 数组，把 A 占满了，于是落单那格只能取 e。',
+    howto: ['在任一区域里找 N 格，其中 N-1 格候选完全一样且个数正好比格数少一；', '看落单那格的候选有没有恰好多出一个数 e；', '若有，落单那格填 e。'],
+    pitfalls:
+      '「恰好多一个」是硬条件。落单那格若多出两个以上，它未必是 e，推导不成立。本作只收出数这一型；裸二元集的删数型要额外谈「同时看得到整个数组」的格子，判定更啰嗦，暂未收录。',
+    find(state) {
+      return findAlsPlacement(state);
+    },
+  });
   /**
    * 依赖「题目唯一解」这个前提：若第四格取了三数组里的某个数，整盘就能重排出第二组解。
    * 几何条件是四格恰好落在两个宫内——跨四个宫时推导不成立。
