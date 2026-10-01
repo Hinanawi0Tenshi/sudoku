@@ -457,6 +457,38 @@
     return null;
   }
   register({
+    id: 'naked-quad',
+    name: '显性四数组',
+    alias: ['Naked Quad'],
+    level: 4,
+    category: '高级',
+    order: 36,
+    tagline: '同区域四格候选完全相同且只有四个 → 其余格删掉这四个数。',
+    principle: '显性数对的推广：同区域四格候选都是 {a, b, c, d}，这四个数必然被这四格用尽，区域内其它格再也放不下它们。',
+    howto: ['区域内找候选恰好 4 个的格子；', '若四格候选完全一致 → 四数组；', '区域内其它格子删掉这四个候选。'],
+    pitfalls: '四格候选不必相邻，但必须同属一个区域。真实题面里出现频率不高。',
+    find(state) {
+      return findNakedSubset(state, 4, 'naked-quad');
+    },
+  });
+
+  register({
+    id: 'hidden-quad',
+    name: '隐性四数组',
+    alias: ['Hidden Quad'],
+    level: 4,
+    category: '高级',
+    order: 37,
+    tagline: '同区域四个数字的候选合起来只有四格 → 这四格删掉别的候选。',
+    principle: '隐性数对的推广：四个数字在同一区域里只能落在同样四格，于是这四格被占满，其余候选作废。',
+    howto: ['区域内挑四个数字；', '看这四个数字的候选并集；', '并集恰好四格 → 四数组，这四格删掉并集之外的候选。'],
+    pitfalls: '一旦并集混入第 5 个格子就不成立，别把三组误当成四组。',
+    find(state) {
+      return findHiddenSubset(state, 4, 'hidden-quad');
+    },
+  });
+
+  register({
     id: 'naked-triple',
     name: '显性三数组',
     alias: ['Naked Triple'],
