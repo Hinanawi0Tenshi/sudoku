@@ -1345,14 +1345,16 @@
     },
   });
   /**
-   * 退化鱼（Franken Fish）：鱼形家族的放宽版。
+   * 退化鱼（Degenerate Fish，也叫 Sashimi Fish）：鱼形家族里 body 缺角的形态。
    * 标准鱼形要求每条基础线里 d 的候选恰好落在同样 size 条覆盖线上；
-   * 退化版允许某条基础线只有一个 d 候选——对应那个「鳍位」已经被别的数字占了。
+   * 退化版允许某条基础线只有一个 d 候选——对应那个交点已经被别的数字占了。
    * 只要所有基础线的候选并起来仍正好是 size 条覆盖线，结论一样成立：
    * 反证与标准鱼形同源，覆盖线上多出来的格子若取 d，逐条基础线会被逼回原处，形成矛盾。
-   * 基础线一条候选都没有时不提供任何信息，直接剔除，不参与本条鱼。
+   * 名字上要特别小心：Franken Fish 不是退化。Franken 指「D 或 S 里有宫」，与缺角是
+   * 两个正交维度。HoDoKu 指出 size 2 的 Franken 会退化成区块排除，所以只有 size >= 3 的 Franken
+   * 才是独立技巧——那一族尚未收录。
    */
-  function findFrankenFish(state, size) {
+  function findDegenerateFish(state, size) {
     const { grid, cand } = state;
 
     const run = (baseIsRows) => {
@@ -1397,7 +1399,7 @@
             for (const ci of sets[k]) marks.push({ cell: at(bases[k], ci), digit: d });
           }
 
-          return baseStep('franken-fish', {
+          return baseStep('degenerate-fish', {
             focusCell: marks[0].cell,
             focusDigit: d,
             cells: marks.map((m) => m.cell).concat(elims.map((x) => x.cell)),
@@ -1417,9 +1419,9 @@
   }
 
   register({
-    id: 'franken-fish',
+    id: 'degenerate-fish',
     name: '退化鱼',
-    alias: ['Franken Fish', 'Franken X-Wing', '退化鱼形'],
+    alias: ['Degenerate Fish', 'Sashimi Fish', '缺角鱼'],
     level: 4,
     category: '高级',
     order: 44,
@@ -1430,7 +1432,7 @@
     pitfalls:
       '并集必须正好是 size 条。多一条说明不成鱼（退回标准鱼形判定），少一条说明覆盖不足、结论不成立。基础线一条候选都没有时不提供信息，应当剔除而不是硬凑。',
     find(state) {
-      return findFrankenFish(state, 2);
+      return findDegenerateFish(state, 2);
     },
   });
   /**
