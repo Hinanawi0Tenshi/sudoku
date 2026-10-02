@@ -136,6 +136,32 @@
 <div id="dialog-root"></div>
 <div id="toast-root" class="toast-root" aria-live="polite"></div>
 
+<script>/*
+ * 版本戳：所有静态资源都带 ?v=BUILD。
+ *
+ * 发布平台不提供可靠的缓存失效手段，同名文件更新后浏览器仍可能拿旧的，
+ * 表现就是「明明发了，用户看到的还是老样子」——很难和「压根没发上去」区分开。
+ * 加上版本戳后 URL 随构建变化，浏览器必然重新拉，缓存问题从根上消失。
+ *
+ * 版本号只有一个来源，就是下面这个 BUILD；
+ * 它同时写进 window.SD_BUILD，启动时能在「关于」页看到当前跑的是哪一版。
+ * 换包时只要改这一处。
+ */
+window.SD_BUILD = '2026-10-03a';
+(function () {
+  var v = window.SD_BUILD;
+  var nodes = document.querySelectorAll('script[src], link[href]');
+  for (var i = 0; i < nodes.length; i++) {
+    var n = nodes[i];
+    var raw = n.getAttribute(n.tagName === 'SCRIPT' ? 'src' : 'href');
+    // 本地锚点与 data URI 不参与版本化
+    if (!raw || raw.charAt(0) === '#' || raw.slice(0, 5) === 'data:') continue;
+    // 已经带过版本号的（例如运行时动态插入的）不重复加
+    if (raw.indexOf('?v=') >= 0) continue;
+    n.setAttribute(n.tagName === 'SCRIPT' ? 'src' : 'href', raw + '?v=' + v);
+  }
+})();
+</script>
 <script src="js/core/01-core.js"></script>
 <script src="js/core/02-board.js"></script>
 <script src="js/core/03-solver.js"></script>
@@ -144,7 +170,6 @@
 <script src="js/core/06-hints.js"></script>
 <script src="js/core/07-rater.js"></script>
 <script src="js/core/08-bank.js"></script>
-<script src="js/core/09-demo.js"></script>
 <script src="js/core/09-demo.js"></script>
 <script src="js/vendor/tesseract/tesseract.min.js"></script>
 <script src="js/ui/10-dom.js"></script>

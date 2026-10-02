@@ -188,6 +188,10 @@
   /* ---------------- Tesseract ---------------- */
 
   const VENDOR = 'js/vendor/';
+  // worker 是运行时拼出来的完整文件路径，可以加版本戳绕开缓存。
+  // corePath 和 langPath 是「目录」——Tesseract 会在其后自己拼 core 文件名
+  // 和 eng.traineddata.gz，给目录加 ?v= 会让拼出来的地址整个错位，
+  // 实测识别率直接掉到 0。这两个目录只能指望 Tesseract 自己那层缓存策略。
 
   function ensureWorker() {
     if (state.worker) return Promise.resolve(state.worker);
@@ -196,7 +200,7 @@
     }
     setStatus('正在加载 OCR 引擎（首次约需几秒）…');
     state.worker = Tesseract.createWorker('eng', 1, {
-      workerPath: VENDOR + 'tesseract/worker.min.js',
+      workerPath: SD.Base.versioned(VENDOR + 'tesseract/worker.min.js'),
       corePath: VENDOR + 'tesseract',
       langPath: VENDOR + 'tessdata',
       workerBlobURL: false,

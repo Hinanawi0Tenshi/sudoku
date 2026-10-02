@@ -584,7 +584,7 @@
     {
       h: '提示是真推理，不是报答案',
       p: [
-        '收录 13 种人类解题技巧，从唯一余数一直到链式推理（反证法）。每条提示都针对当前盘面逐步推导，讲清楚「为什么这一步成立」，并附上技巧原理与常见误区。',
+        '收录 ' + SD.Techniques.LIST.length + ' 种人类解题技巧，从唯一余数一直到链式推理（反证法）。每种技巧都配了一个当场能触发的演示棋盘，对着图看比读文字快。',
         '面板会把此刻能用的解法一次列全并按等级排序，你可以自己挑下一步走哪条路，而不是只能按顺序接受。',
         '讲解里的坐标写成【R6C6】这种可点样式，鼠标停上去（或手机上长按）会在棋盘上把那一格点亮。',
       ],
@@ -619,6 +619,11 @@
       for (const line of sec.p) card.appendChild(el('p', { text: line }));
       root.appendChild(card);
     }
+    // 把版本号摆出来：发布出问题时要能一眼分清
+    // 「发上去了但用户还在看旧缓存」和「压根没发上去」。
+    root.appendChild(
+      el('p.foot-note', { text: '版本 ' + (window.SD_BUILD || '本地开发版') + ' · ' + SD.Techniques.LIST.length + ' 种技巧' })
+    );
     root.appendChild(
     el('p.foot-note', { text: '快捷键：Esc 回首页 · M 笔记 · H 提示 · C 检查 · D 每日挑战 · Ctrl+Z 撤销 · Ctrl+Y 重做' })
     );

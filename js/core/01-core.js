@@ -182,6 +182,18 @@
     return lines.join('\n');
   }
 
+  /*
+   * 给运行时拼出来的资源地址补上版本戳。
+   * index.html 里的 script/link 由那段内联脚本统一加版本戳，但 OCR 的
+   * worker / wasm / 语言包是运行时用字符串拼路径的，走不到那里——
+   * 而这几个文件占了整包 20M 的大头，恰恰最需要绕开缓存。
+   */
+  const versioned = (path) => {
+    const v = (global.SD && global.SD_BUILD) || '';
+    if (!v || path.indexOf('?v=') >= 0) return path;
+    return path + '?v=' + v;
+  };
+
   SD.Base = {
     N,
     CELL_COUNT,
@@ -206,5 +218,6 @@
     gridToString,
     stringToGrid,
     gridToPretty,
+    versioned,
   };
 })(window);
