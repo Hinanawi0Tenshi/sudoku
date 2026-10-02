@@ -50,17 +50,19 @@
   function read() {
     try {
       const raw = localStorage.getItem(KEY);
-      if (!raw) return { settings: Object.assign({}, DEFAULT_SETTINGS), stats: emptyStats(), game: null, userBank: [], wallet: emptyWallet() };
+      if (!raw) return { settings: Object.assign({}, DEFAULT_SETTINGS), stats: emptyStats(), game: null, userBank: [], wallet: emptyWallet(), queue: [], usedGrids: {} };
       const parsed = JSON.parse(raw);
       return {
         settings: Object.assign({}, DEFAULT_SETTINGS, parsed.settings || {}),
         stats: Object.assign(emptyStats(), parsed.stats || {}),
         game: parsed.game || null,
         userBank: parsed.userBank || [],
+        queue: parsed.queue || [],
+        usedGrids: parsed.usedGrids || {},
         wallet: Object.assign(emptyWallet(), parsed.wallet || {}),
       };
     } catch (e) {
-      return { settings: Object.assign({}, DEFAULT_SETTINGS), stats: emptyStats(), game: null, userBank: [], wallet: emptyWallet() };
+      return { settings: Object.assign({}, DEFAULT_SETTINGS), stats: emptyStats(), game: null, userBank: [], wallet: emptyWallet(), queue: [], usedGrids: {} };
     }
   }
 
@@ -116,6 +118,91 @@
     return id;
   }
 
+  /**
+   * 自动生成的待做题。每档固定攒 3 道，做完一道补一道。
+   * 与 userBank 分开：那些是用户自己从照片存的，不该被自动逻辑删改，
+   * 补位时也不会去动它们。
+   */
+  function queue() {
+    return state.queue || [];
+  }
+
+  /** 题面指纹。已生成过的题面集合，防止反复撞同一道。 */
+  function usedGrids() {
+    return state.usedGrids || {};
+  }
+
+  /** 指纹表只保留最近两千条，再多这个键会长到几十万字符拖慢每一次读档 */
+  function trimUsed(u) {
+    const keys = Object.keys(u);
+    if (keys.length > 2000) {
+      for (let i = 0; i < keys.length - 2000; i++) delete u[keys[i]];
+    }
+    return u;
+  }
+
+  function markUsed(grid) {
+    const u = usedGrids();
+    u[grid] = 1;
+    state.usedGrids = trimUsed(u);
+  }
+
+  function queueOf(diff) {
+    return queue().filter((q) => q.diff === diff && !q.done);
+  }
+
+  function pushQueue(diff, grid, clues, level) {
+    const list = queue().slice();
+    list.push({
+      id: 'q' + diff + '-' + Date.now().toString(36) + '-' + Math.floor(Math.random() * 1e6).toString(36),
+      diff: diff, grid: grid, clues: clues, level: level, done: false, addedAt: Date.now(),
+    });
+    state.queue = list;
+    markUsed(grid);
+  }
+
+  /** 把题面记进已用指纹。每日挑战的题面也走这里，免得明天又在队列里遇到今天做过的那道。 */
+  function noteGridUsed(grid) {
+    if (!grid) return;
+    const u = usedGrids();
+    u[grid] = 1;
+    trimUsed(u);
+    state.usedGrids = u;
+    save();
+  }
+  function finishQueueItem(id) {
+    const list = queue().slice();
+    for (const q of list) if (q.id === id) { q.done = true; q.finishedAt = Date.now(); }
+    state.queue = list.slice(-60);
+    save();
+  }
+
+  function removeQueueItem(id) {
+    state.queue = queue().filter((q) => q.id !== id);
+    save();
+  }
+
+  /**
+   * 把某档的待做数补到 keep 道。已出现过的题面一律不重复。
+   * 出题是同步的，keep 又很小，最多也就是几秒。
+   */
+  function refillQueue(diff, keep, gen) {
+    const have = queueOf(diff).length;
+    const need = keep - have;
+    if (need <= 0) return 0;
+    const used = usedGrids();
+    let added = 0;
+    for (let i = 0; i < need * 6 && added < need; i++) {
+      const g = gen();
+      if (!g || !g.grid) continue;
+      const key = g.grid;
+      if (used[key]) continue;
+      pushQueue(diff, key, g.clues, g.level);
+      added++;
+    }
+    if (added) save();
+    return added;
+  }
   function removeUserPuzzle(id) {
     state.userBank = userBank().filter((p) => p.id !== id);
     save();
@@ -230,6 +317,13 @@
     userBank: userBank,
     addUserPuzzle: addUserPuzzle,
     removeUserPuzzle: removeUserPuzzle,
+    queue: queue,
+    queueOf: queueOf,
+    refillQueue: refillQueue,
+    finishQueueItem: finishQueueItem,
+    removeQueueItem: removeQueueItem,
+    usedGrids: usedGrids,
+    noteGridUsed: noteGridUsed,
     resetStats: resetStats,
     resetSettings: resetSettings,
     resetAll: resetAll,

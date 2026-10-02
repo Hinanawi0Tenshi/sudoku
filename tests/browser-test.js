@@ -349,6 +349,40 @@ async function main() {
     return { ok: opened === 1 && !!board && !err, info: info };
   })()`);
 
+  await step('题库页五档都有待做题且不重复', `(async function(){
+    document.querySelector('.home-item[data-go=bank]').click();
+    await new Promise(function (r) { setTimeout(r, 3000); });
+    var rows = Array.from(document.querySelectorAll('#page-root .bank-item.is-queue'));
+    var state = SD.Store.state();
+    var dbg = 'queue=' + (state.queue || []).length + ' used=' + Object.keys(state.usedGrids || {}).length;
+    var bad = [];
+    for (var d of SD.Generator.DIFFICULTY_ORDER) {
+      var cfg = SD.Generator.DIFFICULTY[d];
+      if (SD.Store.queueOf(d).length !== 3) bad.push(cfg.name + ' 待做 ' + SD.Store.queueOf(d).length + ' 道');
+    }
+    var seen = new Set();
+    var dup = 0;
+    for (const diff of SD.Generator.DIFFICULTY_ORDER) {
+      for (const q of SD.Store.queueOf(diff)) {
+        if (seen.has(q.grid)) dup++;
+        seen.add(q.grid);
+      }
+    }
+    return { ok: bad.length === 0 && dup === 0 && rows.length >= 5,
+             info: '行数 ' + rows.length + '，' + (bad.length ? bad.join('；') : '五档各 3 道') + '，重复 ' + dup + '，' + dbg };
+  })()`);
+
+  await step('批量题库五档数量与题面去重', `(function(){
+    var want = { easy: 1000, medium: 1000, hard: 1000, expert: 1000, master: 200 };
+    var bad = [];
+    for (const diff of SD.BankBig.ORDER) {
+      var n = SD.BankBig.countOf(diff);
+      if (n !== want[diff]) bad.push(diff + ' ' + n + '/' + want[diff]);
+      if (SD.BankBig.gridsOf(diff).size !== n) bad.push(diff + ' 题面有重复');
+    }
+    return { ok: bad.length === 0, info: bad.length ? bad.join('；') : '五档 4200 道，题面无重复' };
+  })()`);
+
   await step('题库每道题都合法且唯一解', `(function(){
     const bad = [];
     for (const p of SD.Bank.LIST) {
@@ -709,7 +743,7 @@ async function main() {
     document.querySelector('.home-item[data-go=bank]').click();
     await new Promise(r => setTimeout(r, 300));
     const drop = document.querySelector('#page-root .ocr-drop');
-    const builtIn = document.querySelectorAll('#page-root .bank-item:not(.is-mine)').length;
+    const builtIn = document.querySelectorAll('#page-root .bank-item:not(.is-mine):not(.is-queue)').length;
     const saved = document.querySelectorAll('#page-root .bank-item.is-mine').length;
     // 存一道再退回首页重进，验证它真的落到了存储里并且页面会重画
     SD.Store.addUserPuzzle(SD.Bank.LIST[2].grid, '我的题目 1', '简单');

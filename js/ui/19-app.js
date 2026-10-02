@@ -377,11 +377,67 @@
   }
 
   /* ---------------- 题库页 ---------------- */
+  /** 每档自动攒几道待做题，做完一道补一道 */
+  const QUEUE_KEEP = 3;
+
+  /**
+   * 补位出题。已经出现在待做队列、玩家自己题库、每日挑战里的题面一律跳过——
+   * 用题面字符串做指纹，比按标题去重可靠得多。
+   */
+  function refillQueue(diff) {
+    if (!diff || !SD.Generator.DIFFICULTY[diff]) return;
+    const gen = () => {
+      // 优先从批量题库里抽：那里有几千道已复核过的题，抽中就是零成本，
+      // 而且不会再和「已经出现过」的题相撞——题库本身就是去重过的全集。
+      if (SD.BankBig && SD.BankBig.countOf(diff)) {
+        const bank = SD.BankBig.randomOf(diff);
+        if (bank) {
+          const used = SD.Store.usedGrids();
+          for (let i = 0; i < 20 && used[bank.grid]; i++) bank = SD.BankBig.randomOf(diff);
+          if (bank && !used[bank.grid]) {
+            return { grid: bank.grid, clues: bank.clueCount, level: bank.level };
+          }
+        }
+      }
+      const g = SD.Generator.generateSync(diff, null);
+      return { grid: B.gridToString(g.givens), clues: g.clueCount, level: g.level };
+    };
+    SD.Store.refillQueue(diff, QUEUE_KEEP, gen);
+    return SD.Store.queueOf(diff).length;
+  }
+
+  /**
+   * 每日挑战的题面记进已用指纹，免得玩家今天做过的那道明天又在队列里出现。
+   * 只在开题库页时算一次：放在每次补位里会反复重算每日挑战，
+   * 大师档一秒一道，补五档位要多等好几秒。
+   */
+  let dailyNoted = false;
+  function noteDailyGrid() {
+    if (dailyNoted) return;
+    dailyNoted = true;
+    SD.Store.noteGridUsed(B.gridToString(SD.Generator.generateSync('medium', SD.Generator.dailySeed()).givens));
+  }
+
+  function playQueueItem(item) {
+    startWith(B.stringToGrid(item.grid), {
+      difficulty: item.diff,
+      difficultyName: SD.Generator.DIFFICULTY[item.diff].name,
+      clueCount: item.clues,
+      title: SD.Generator.DIFFICULTY[item.diff].name + ' · 待做题',
+      queueId: item.id,
+    });
+  }
+
   function openBankPage(root) {
     root.appendChild(el('p.lead', { text: '精选题目点一下就上盘；也可以从照片把题读出来，存进你自己的题库。' }));
     root.appendChild(el('h3.sec-title', { text: '从图片添加' }));
     const ocrBox = el('div.ocr-box');
     root.appendChild(ocrBox);
+    root.appendChild(el('h3.sec-title', { text: '待做题' }));
+    root.appendChild(el('p.lead', { text: '每档自动攒 ' + QUEUE_KEEP + ' 道，做完一道立刻补一道。题目不会和题库、每日挑战重复。' }));
+    const queueBox = el('div.bank-list');
+    root.appendChild(queueBox);
+
     root.appendChild(el('h3.sec-title', { text: '我的题库' }));
     const mine = el('div.bank-list');
     root.appendChild(mine);
@@ -443,6 +499,41 @@
       }
     }
     drawMine();
+    drawQueue();
+
+    function drawQueue() {
+      U.clear(queueBox);
+      let any = false;
+      for (const diff of SD.Generator.DIFFICULTY_ORDER) {
+        const cfg = SD.Generator.DIFFICULTY[diff];
+        const items = SD.Store.queueOf(diff);
+        if (!items.length) {
+          queueBox.appendChild(el('p.lead', { text: cfg.name + '：暂无' }));
+          continue;
+        }
+        any = true;
+        const line = el('div.bank-item.is-queue', null, [
+          el('div.bi-main', null, [
+            el('b.bi-name', { text: cfg.name + '（' + items.length + ' 道）' }),
+            el('span.bi-band', { text: '待做' }),
+          ]),
+          el('div.bi-meta', { text: '做完一道自动补一道' }),
+          el('div.bi-row', null, [
+            el('button.btn.btn-primary', { text: '开始', onclick: () => playQueueItem(items[0]) }),
+          ]),
+        ]);
+        queueBox.appendChild(line);
+      }
+      if (!any) {
+        // 一档都没有时现场补一次。补不上就照实说，别转圈——
+        // generateSync 理论上总能出题，但这里不该拿死循环赌。
+        noteDailyGrid();
+        let added = 0;
+        for (const diff of SD.Generator.DIFFICULTY_ORDER) added += refillQueue(diff);
+        if (added) drawQueue();
+        else queueBox.appendChild(el('p.lead', { text: '暂时没能出题，请稍后再试。' }));
+      }
+    }
   }
 
   function playBank(id) {
@@ -680,6 +771,12 @@
       dailyKey: st.meta.dailyKey,
     });
     scheduleSave();
+    // 待做队列：做完一道立刻补一道，玩家手上永远有 QUEUE_KEEP 道可打。
+    // 出题是同步的，最多一两秒，这里已经过了结算弹窗的时机。
+    if (st.meta.queueId) {
+      SD.Store.finishQueueItem(st.meta.queueId);
+      refillQueue(st.meta.difficulty);
+    }
     render();
     renderAllPanels();
 
