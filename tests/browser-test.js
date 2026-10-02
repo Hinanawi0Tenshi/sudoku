@@ -98,7 +98,7 @@ async function main() {
   })()`);
 
   await step('核心命名空间齐备', `(function(){
-    const need = ['Base','Board','Solver','Generator','Techniques','Hints','Rater','Validation','UI','Store','BoardView','Game','Panels','Data','Settings','Vision','OCR','App','Gacha'];
+    const need = ['Base','Board','Solver','Generator','Techniques','Hints','Rater','Validation','UI','Store','BoardView','Game','Panels','Data','Settings','Vision','OCR','App','Gacha','Demo','Learn'];
     const miss = need.filter(k => !window.SD || !SD[k]);
     return { ok: miss.length === 0, info: miss.length ? '缺少 ' + miss.join(',') : need.length + ' 个模块全部就位' };
   })()`);
@@ -330,9 +330,23 @@ async function main() {
   await step('启动落在首页且七个入口都在', `(async function(){
     const view = document.documentElement.getAttribute('data-view');
     const items = Array.from(document.querySelectorAll('.home-item')).map((b) => b.dataset.go);
-    const want = ['play', 'bank', 'daily', 'stats', 'gacha', 'settings', 'about'];
+    const want = ['play', 'bank', 'daily', 'mine', 'learn', 'settings', 'about'];
     return { ok: view === 'home' && items.join(',') === want.join(','),
              info: '视图=' + view + '，入口 ' + items.join(' / ') };
+  })()`);
+
+  await step('技巧教学页能展开且有演示棋盘', `(async function(){
+    var err = null;
+    window.onerror = function (m) { err = m; };
+    document.querySelector('.home-item[data-go=learn]').click();
+    var heads = document.querySelectorAll('.tech-head');
+    if (!heads.length) return { ok: false, info: '没有渲染出技巧卡片' };
+    heads[0].click();
+    var board = document.querySelector('.demo-board');
+    var opened = document.querySelectorAll('.tech-card.is-open').length;
+    var info = '卡片 ' + heads.length + ' 个，展开 ' + opened + ' 个，演示棋盘 ' + (board ? board.children.length + ' 格' : '无');
+    if (err) info += '，异常: ' + err;
+    return { ok: opened === 1 && !!board && !err, info: info };
   })()`);
 
   await step('题库每道题都合法且唯一解', `(function(){

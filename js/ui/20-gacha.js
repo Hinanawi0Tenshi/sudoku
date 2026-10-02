@@ -1,8 +1,8 @@
-/* 数独 · 图鉴与抽卡（壳子）
+/* 数独 · 我的（战绩 + 卡牌图鉴）
  *
- * 方案见 docs/奖励机制方案.md。这个文件目前只搭骨架：
- *   卡池定义（内联常量，不能走 fetch——file:// 下会被同源策略拦掉）、
- *   程序化卡面、图鉴页渲染。
+ * 方案见 docs/奖励机制方案.md。图鉴与战绩合成一页，用标签切换——
+ * 两边都是「我积累的东西」，拆成两个首页入口反而占地方。
+ *
  * 抽取、保底、碎片兑换、点数结算都还是空实现，等确认后再接。
  *
  * 三条硬边界（实现时不要破坏）：
@@ -63,13 +63,10 @@
     ]);
   }
 
-  /** 图鉴页内容。抽卡面板还没做，先把图鉴本身铺满整页。 */
   function renderLibrary(root) {
     const wallet = SD.Store.state().wallet || {};
     const owned = wallet.owned || {};
-    root.appendChild(el('p.lead', {
-      text: '通关累计点数，在图鉴里抽卡。抽取与兑换还在做，先看看卡面。',
-    }));
+    root.appendChild(el('p.lead', { text: '通关累计点数，在图鉴里抽卡。抽取与兑换还在做，先看看卡面。' }));
     const lib = el('div.gacha-lib');
     for (const card of LIST) {
       const n = owned[card.id] || 0;

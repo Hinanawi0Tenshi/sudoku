@@ -324,13 +324,41 @@
   }
 
 
-  /** 启动页的六个入口。游戏页里没有这些按钮，所以这里是唯一的导航 */
+  /** 「我的」页：战绩与图鉴都是自己的积累，合成一页用标签切换 */
+  function openMinePage() {
+    let tab = 'stats';
+    $('#page-title').textContent = '我的';
+    const root = clear($('#page-root'));
+    const bar = el('div.tabbar');
+    const body = el('div.tab-body');
+    const tabs = [
+      { id: 'stats', label: '战绩', render: (r) => SD.Data.renderData(r, { game: game, applyImported: applyImported }) },
+      { id: 'cards', label: '图鉴', render: (r) => SD.Gacha.renderLibrary(r) },
+    ];
+    const draw = () => {
+      clear(bar);
+      for (const t of tabs) {
+        bar.appendChild(el('button.tab' + (tab === t.id ? '.is-on' : ''), {
+          text: t.label,
+          onclick: () => { tab = t.id; draw(); },
+        }));
+      }
+      clear(body);
+      tabs.find((t) => t.id === tab).render(body);
+    };
+    draw();
+    root.appendChild(bar);
+    root.appendChild(body);
+    showView('page');
+  }
+
+  /** 启动页的入口。游戏页里没有这些按钮，所以这里是唯一的导航 */
   function handleHome(go) {
     if (go === 'play') { openNewGameDialog(); return; }
     if (go === 'bank') { openPage('题库', openBankPage); return; }
     if (go === 'daily') { calMonth = null; openPage('每日挑战', openDailyPage); return; }
-    if (go === 'stats') { openPage('数据', (root) => SD.Data.renderData(root, { game: game, applyImported: applyImported })); return; }
-    if (go === 'gacha') { openPage('图鉴', (root) => SD.Gacha.renderLibrary(root)); return; }
+    if (go === 'mine') { openMinePage(); return; }
+    if (go === 'learn') { openPage('技巧教学', (root) => SD.Learn.renderLearn(root)); return; }
     if (go === 'settings') { openPage('设置', (root) => SD.Settings.renderSettings(root, settingsCtx())); return; }
     if (go === 'about') { openPage('关于', openAboutPage); return; }
   }
