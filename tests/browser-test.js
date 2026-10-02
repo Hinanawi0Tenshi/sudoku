@@ -386,6 +386,42 @@ async function main() {
     return { ok: got === null, info: got === null ? '旧存档已被丢弃' : '旧存档仍被恢复（不符合预期）' };
   })()`);
 
+  await step('自动求解不会用求解器偷偷填完剩下的', `(async function(){
+    // 用一道「余数法推不完」的盘面：跑 autoSolve 后若被求解器兜底填满，
+    // 就会出现「全盘是自动求解填的却声称人类推完」的假象
+    var gen = SD.Generator.generateSync('master', 'autosolve-honesty');
+    SD.App.startWith(gen.givens, { difficultyName: '测试' }, gen.solution);
+    await new Promise(function (r) { setTimeout(r, 120); });
+    var g = SD.App.getGame();
+    var before = g.state.board.grid.filter(Boolean).length;
+    var n = g.autoSolve();
+    var after = g.state.board.grid.filter(Boolean).length;
+    var complete = after === 81;
+    var err = g.state.solveError || '';
+    // 填满了就必须真的是 walkthrough 推完的（技巧记录非空），
+    // 没填满则必须说明原因，不许静默
+    var ok = complete ? (n > 0 && g.state.techniques.length > 0) : err.length > 0;
+    return { ok: ok,
+             info: '推了 ' + n + ' 步，填到 ' + before + '→' + after + ' 格，记录 ' + g.state.techniques.length
+               + ' 条技巧' + (complete ? '，已推完' : '，未推完并说明：' + err.slice(0, 20)) };
+  })()`);
+
+  await step('通关统计包含纯删数的技巧', `(async function(){
+    var gen = SD.Generator.generateSync('master', 'tech-record-elim-only');
+    SD.App.startWith(gen.givens, { difficultyName: '测试' }, gen.solution);
+    await new Promise(function (r) { setTimeout(r, 120); });
+    var g = SD.App.getGame();
+    g.autoSolve();
+    var kinds = {};
+    for (const id of g.state.techniques) kinds[id] = 1;
+    var ids = Object.keys(kinds);
+    var singles = (kinds['naked-single'] || 0) + (kinds['hidden-single'] || 0);
+    var others = ids.filter(function (k) { return k !== 'naked-single' && k !== 'hidden-single'; });
+    SD.App.showView('home');
+    return { ok: others.length > 0,
+             info: '记录 ' + ids.length + ' 种技巧，其中余数法 ' + singles + ' 次、其他 ' + others.length + ' 种：' + others.join(',') };
+  })()`);
+
   await step('批量题库五档数量与题面去重', `(function(){
     var want = { easy: 1000, medium: 1000, hard: 1000, expert: 1000, master: 1000 };
     var bad = [];

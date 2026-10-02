@@ -295,23 +295,34 @@
       let applied = 0;
       const cand = SD.Validation.computeCandidates(st.board.grid);
       for (const entry of steps) {
+        // 技巧记录要按「这一步用到了什么」记，而不是只在出数时记。
+        // 只在 placements 里 push 的话，XY 链、带鳍鱼这些纯删数的技巧会被整个漏掉，
+        // 通关弹窗于是只列出唯一余数法，看着像高难度其实是余数法秒杀。
+        let acted = false;
         for (const p of entry.step.placements) {
           st.board.grid[p.cell] = p.digit;
           st.board.locked[p.cell] = 1;
           cand[p.cell] = 0;
           for (const q of B.PEERS[p.cell]) cand[q] &= ~B.bit(p.digit);
-          st.techniques.push(entry.step.id);
+          acted = true;
           applied++;
         }
-        for (const e of entry.step.eliminations) cand[e.cell] &= ~B.bit(e.digit);
+        for (const e of entry.step.eliminations) {
+          cand[e.cell] &= ~B.bit(e.digit);
+          acted = true;
+        }
+        if (acted) st.techniques.push(entry.step.id);
         if (applied > 400) break;
       }
       if (!SD.Validation.isComplete(st.board.grid)) {
-        const solved = SD.Solver.solveOne(st.board.grid);
-        if (solved) {
-          st.board.grid.set(solved);
-          st.board.locked.fill(1);
-        }
+        // 人类技巧没能推完。原先这里会直接调求解器把剩下的填满，
+        // 而技巧统计只记录 walkthrough 那部分——结果弹窗会显示
+        // 「已用人类技巧推完 N 步」，让人以为高难题其实余数法就能秒杀，
+        // 而实际上是求解器替他填的。宁可明说推不完，也不冒充人类解法。
+        st.solveError = '人类技巧推到最后一步卡住了（剩下 ' +
+          (B.CELL_COUNT - st.board.grid.filter(Boolean).length) + ' 格需要更高级的技巧）。可撤销后改用提示逐步走。';
+        emit('solve');
+        return applied;
       }
       commitHistory(before);
       st.hint = null;
