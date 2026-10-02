@@ -1130,7 +1130,13 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
   /* 提示展开时：棋盘大小与位置一动不动，讲解从盘面正下方升起来盖住数字键盘与功能栏。
      之前让页面滚动去找讲解，结果盘面被顶出屏幕，讲解里的【R2C8】根本对不上格子。
      面板里每一行都要抠着给：技巧条压成一行横滑，讲解正文才有地方。 */
-  .layout.is-split .hint-strip { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .layout.is-split .hint-strip {
+  flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+  /* 尾部留半个 chip 的空隙：否则最后一个 chip 贴着内容右缘，
+     滚动到最右时它右边缘仍会超出可视区一点点（实测差 10px）。 */
+  scroll-padding-right: 16px;
+  padding-right: 16px;
+}
   .layout.is-split .hint-strip::-webkit-scrollbar { display: none; }
   .layout.is-split .hint-chip { flex: none; }
   .layout.is-split .hint-head { padding: 7px 10px; }

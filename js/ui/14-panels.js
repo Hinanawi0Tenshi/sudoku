@@ -113,7 +113,16 @@
     // 技巧条也要把当前这条滚进可视范围——它现在是横滑的一行，选中的可能在屏外
     root.scrollTop = 0;
     const on = strip.querySelector('.hint-chip.is-on');
-    if (on) strip.scrollLeft = on.offsetLeft - (strip.clientWidth - on.offsetWidth) / 2;
+    if (on) {
+      // 居中值常常超出可滚动范围，会被浏览器截到最大值，结果末尾那条露不全。
+      // 夹一次范围，再按实际超出量补一次。
+      const max = Math.max(0, strip.scrollWidth - strip.clientWidth);
+      let want = on.offsetLeft - (strip.clientWidth - on.offsetWidth) / 2;
+      want = Math.max(0, Math.min(want, max));
+      strip.scrollLeft = want;
+      const over = on.offsetLeft + on.offsetWidth - (strip.scrollLeft + strip.clientWidth);
+      if (over > 0) strip.scrollLeft = Math.min(max, strip.scrollLeft + over);
+    }
   }
   /* ---------------- 技巧百科 ---------------- */
   function renderAvailable(root, grid) {

@@ -69,6 +69,12 @@
   let state = read();
   let saveTimer = null;
 
+  /**
+   * 题面来源标记。换生成器时它必须跟着变，旧存档才会被判过期而丢弃。
+   * 与 SD_BUILD 分开：发一次包不等于换了生成逻辑。
+   */
+  const GEN_VERSION = 2;
+
   function flush() {
     try {
       localStorage.setItem(KEY, JSON.stringify(state));
@@ -96,8 +102,24 @@
     save();
   }
 
+  /**
+   * 取出待恢复的对局，但只在题面来自当前这一代生成器时才给。
+   *
+   * 生成器修过之后（曾经所有题共用同一个终盘、难度下限形同虚设），
+   * 修复前存下的题面是旧产物——直接恢复的话，刷新多少次都会撞回那道
+   * 又简单又重复的旧题，看着就像「修复没生效」。
+   * 每日挑战是按日期播种的，重新生成即可；普通对局丢掉一局存档，
+   * 代价远小于让人一直看着过时的题目。
+   */
   function loadGame() {
-    return state.game;
+    const g = state.game;
+    if (!g || !g.givens) return null;
+    if (g.genVersion !== GEN_VERSION) {
+      state.game = null;
+      save();
+      return null;
+    }
+    return g;
   }
 
   /* ---------------- 我的题库 ---------------- */

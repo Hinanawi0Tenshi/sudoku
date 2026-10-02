@@ -196,6 +196,8 @@
       mistakes: st.mistakes,
       elapsed: game.elapsedMs(),
       techniques: st.techniques,
+      // 题面来源标记：换过生成器之后，旧存档该被丢弃而不是反复恢复出来
+      genVersion: 2,
     });
     if (st.meta.dailyKey && !st.won) {
       let filled = 0;

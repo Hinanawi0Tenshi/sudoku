@@ -372,6 +372,20 @@ async function main() {
              info: '行数 ' + rows.length + '，' + (bad.length ? bad.join('；') : '五档各 3 道') + '，重复 ' + dup + '，' + dbg };
   })()`);
 
+  await step('换一代生成器后旧存档会被丢弃', `(function(){
+    // 模拟「修复前存下的那局」：没有 genVersion 的旧存档
+    SD.Store.saveGame({ givens: SD.Bank.LIST[0].grid, grid: SD.Bank.LIST[0].grid, notes: [], meta: { difficultyName: '旧存档' }, hints: 0, mistakes: 0, elapsed: 0 });
+    var raw = JSON.parse(localStorage.getItem(Object.keys(localStorage).filter(function (k) { return /sudoku/i.test(k); })[0] || '{}'));
+    var key = Object.keys(localStorage).filter(function (k) { return /sudoku/i.test(k); })[0];
+    if (key) {
+      var obj = JSON.parse(localStorage.getItem(key));
+      delete obj.game.genVersion;
+      localStorage.setItem(key, JSON.stringify(obj));
+    }
+    var got = SD.Store.loadGame();
+    return { ok: got === null, info: got === null ? '旧存档已被丢弃' : '旧存档仍被恢复（不符合预期）' };
+  })()`);
+
   await step('批量题库五档数量与题面去重', `(function(){
     var want = { easy: 1000, medium: 1000, hard: 1000, expert: 1000, master: 1000 };
     var bad = [];
