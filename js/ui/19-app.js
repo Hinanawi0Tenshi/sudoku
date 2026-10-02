@@ -330,6 +330,7 @@
     if (go === 'bank') { openPage('题库', openBankPage); return; }
     if (go === 'daily') { calMonth = null; openPage('每日挑战', openDailyPage); return; }
     if (go === 'stats') { openPage('数据', (root) => SD.Data.renderData(root, { game: game, applyImported: applyImported })); return; }
+    if (go === 'gacha') { openPage('图鉴', (root) => SD.Gacha.renderLibrary(root)); return; }
     if (go === 'settings') { openPage('设置', (root) => SD.Settings.renderSettings(root, settingsCtx())); return; }
     if (go === 'about') { openPage('关于', openAboutPage); return; }
   }

@@ -33,19 +33,34 @@
     daily: {},
   });
 
+  /** 图鉴与抽卡的账本。重复卡转碎片、指定兑换靠 owned 里的张数。 */
+  function emptyWallet() {
+    return {
+      points: 0,
+      shards: 0,
+      owned: {},
+      skins: [],
+      tickets: 0,
+      pity: 0,
+      drawCount: 0,
+      seenGrids: {},
+    };
+  }
+
   function read() {
     try {
       const raw = localStorage.getItem(KEY);
-      if (!raw) return { settings: Object.assign({}, DEFAULT_SETTINGS), stats: emptyStats(), game: null, userBank: [] };
+      if (!raw) return { settings: Object.assign({}, DEFAULT_SETTINGS), stats: emptyStats(), game: null, userBank: [], wallet: emptyWallet() };
       const parsed = JSON.parse(raw);
       return {
         settings: Object.assign({}, DEFAULT_SETTINGS, parsed.settings || {}),
         stats: Object.assign(emptyStats(), parsed.stats || {}),
         game: parsed.game || null,
         userBank: parsed.userBank || [],
+        wallet: Object.assign(emptyWallet(), parsed.wallet || {}),
       };
     } catch (e) {
-      return { settings: Object.assign({}, DEFAULT_SETTINGS), stats: emptyStats(), game: null, userBank: [] };
+      return { settings: Object.assign({}, DEFAULT_SETTINGS), stats: emptyStats(), game: null, userBank: [], wallet: emptyWallet() };
     }
   }
 
@@ -202,6 +217,8 @@
 
   SD.Store = {
     settings: settings,
+    state: read,
+    emptyWallet: emptyWallet,
     set: set,
     stats: stats,
     saveGame: saveGame,

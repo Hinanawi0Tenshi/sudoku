@@ -98,7 +98,7 @@ async function main() {
   })()`);
 
   await step('核心命名空间齐备', `(function(){
-    const need = ['Base','Board','Solver','Generator','Techniques','Hints','Rater','Validation','UI','Store','BoardView','Game','Panels','Data','Settings','Vision','OCR','App'];
+    const need = ['Base','Board','Solver','Generator','Techniques','Hints','Rater','Validation','UI','Store','BoardView','Game','Panels','Data','Settings','Vision','OCR','App','Gacha'];
     const miss = need.filter(k => !window.SD || !SD[k]);
     return { ok: miss.length === 0, info: miss.length ? '缺少 ' + miss.join(',') : need.length + ' 个模块全部就位' };
   })()`);
@@ -327,10 +327,10 @@ async function main() {
     return { ok: on.join(',') === '7', info: '点亮的数字=' + (on.join(',') || '无') + '，选中格笔记=0b' + g.state.board.notes[0].toString(2) };
   })()`);
 
-  await step('启动落在首页且六个入口都在', `(async function(){
+  await step('启动落在首页且七个入口都在', `(async function(){
     const view = document.documentElement.getAttribute('data-view');
     const items = Array.from(document.querySelectorAll('.home-item')).map((b) => b.dataset.go);
-    const want = ['play', 'bank', 'daily', 'stats', 'settings', 'about'];
+    const want = ['play', 'bank', 'daily', 'stats', 'gacha', 'settings', 'about'];
     return { ok: view === 'home' && items.join(',') === want.join(','),
              info: '视图=' + view + '，入口 ' + items.join(' / ') };
   })()`);
