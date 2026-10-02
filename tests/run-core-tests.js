@@ -390,6 +390,48 @@ section('终盘多样性：每道题的解不能都长得一样');
     days.add(B.gridToString(Generator.generateSync('medium', Generator.dailySeed(new Date(d + 'T00:00:00'))).solution));
   }
   eq(days.size, 6, '每日挑战 6 天的解互不相同');
+
+section('难度下限：不能被更简单的技巧解完');
+{
+  // 用户报的问题：每日挑战「唯一余数就搞定了」。分档参照开源实现
+  // sunsided/sudoku2-rs 的 Difficulty —— 以「不试错所需的最难技巧」定档，
+  // 跑完整条策略链记录全程用到的最高档。这与 Rater.rate(grid,{maxLevel}) 同构。
+  const soloOnly = (givens) => {
+    const g = Array.from(givens);
+    for (let pass = 0; pass < 200; pass++) {
+      const cand = Validation.computeCandidates(g);
+      let moved = false;
+      for (let i = 0; i < 81; i++) {
+        if (g[i]) continue;
+        if (B.popcount(cand[i]) === 1) { g[i] = B.maskToDigits(cand[i])[0]; moved = true; }
+      }
+      if (!moved) break;
+    }
+    return g.filter(Boolean).length;
+  };
+  let soloSolvable = 0;
+  for (let d = 1; d <= 12; d++) {
+    const key = '2026-10-' + B.pad2(d);
+    const gen = Generator.generateSync('medium', Generator.dailySeed(new Date(key + 'T00:00:00')));
+    if (soloOnly(gen.givens) === 81) soloSolvable++;
+  }
+  eq(soloSolvable, 0, '连续 12 天每日挑战没有一天能被纯唯一余数法解完');
+
+  const levelOf = (givens) => {
+    for (let lv = 1; lv <= 5; lv++) if (Rater.rate(givens, { maxLevel: lv }).solved) return lv;
+    return 9;
+  };
+  for (const diff of ['medium', 'hard', 'expert']) {
+    const floor = Generator.DIFFICULTY[diff].harderThan + 1;
+    let below = 0;
+    for (let i = 0; i < 6; i++) {
+      const gen = Generator.generateSync(diff, null);
+      if (levelOf(gen.givens) < floor) below++;
+    }
+    // 5 次尝试都撞不上时限时会退而取次优，允许偶发，不允许成片偏易
+    ok(below <= 1, diff + ' 六道里最多一道低于 L' + floor + '（实测 ' + below + '/6）');
+  }
+}
 }
 
 section('生成器');

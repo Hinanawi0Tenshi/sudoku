@@ -57,16 +57,20 @@
     const order = B.shuffle(Array.from({ length: B.CELL_COUNT }, (_, i) => i), rng);
     let last = null;
     const target = cfg.clues[0];
-    // 线索数到达目标后还要继续往下挖，直到难度下限达成。
-    // 只挖到 32 格就收工的话，这道题往往仍是唯一余数能解完的，配不上「简单」标签。
-    // 下探设一个余量，免得为了凑难度把题挖成需要试错的题。
-    const floor = target - 8;
+    // 下探余量：挖得更深正是逼出高阶技巧的手段。只挖到线索数目标就收工的话，
+    // 高级难度的下限常常根本撞不上（要 4 行同处一列这种结构），
+    // 于是生成器只能退而求其次，返回一道比标称等级简单得多的题。
+    // 余量给到 14：难度上限和线索数下限这两条同时收紧时，
+    // 真正达标的局面只出现在很稀疏的区间里。
+    const floor = target - 14;
 
     for (const i of order) {
       if (!puzzle[i]) continue;
       const clues = countClues(puzzle);
-      if (clues <= floor) break;
+      // 达标且已挖到线索目标才算成；只达标但线索还偏多就继续挖，
+      // 线索越少逼出的技巧越硬，提前收工会把好牌浪费掉。
       if (clues <= target && meetsFloor(puzzle, cfg)) break;
+      if (clues <= floor) break;
 
       const backup = puzzle[i];
       puzzle[i] = 0;
@@ -80,7 +84,9 @@
         puzzle[i] = backup;
         continue;
       }
-      if (meetsFloor(puzzle, cfg)) return { reached: true, rating: hard };
+      if (meetsFloor(puzzle, cfg) && countClues(puzzle) <= cfg.clues[0]) {
+        return { reached: true, rating: hard };
+      }
       last = hard;
     }
     // 没达���难度下限时，评级必须按最终盘面重算。
@@ -127,7 +133,20 @@
     };
   }
 
+  /**
+   * 打分用于在没造出达标题时挑次优：先比实际需要的技巧等级，再比线索数。
+   * 线索少不等于更难——挖过头会让题目需要试错，hard.solved 已经把这种排除了，
+   * 但同等可解的前提下仍偏向线索多的那道，读起来更从容。
+   */
   const scoreOf = (rating, clues) => (rating.solved ? rating.level * 1000 + Math.min(clues, 45) : -1);
+
+  // 高级难度的下限比低级难得多：四行同处一列这种结构随机撒洞很难撞上。
+  // 5 次不够，给到 40 次；每轮挖洞成本不高，实测一道题仍在两三秒内。
+  //
+  // 次数给到这个量不是为了「碰运气」，而是因为降级策略要求候选池够大——
+  // 一旦 12 次都造不出达标题就会退而取次优，而次优可能只比最低档高一点，
+  // 表现出来就是「专家难度出出一道简单题」。池子大了才挑得到真正的 L4。
+  const ATTEMPTS = 40;
 
   /** 同步出题，供单元测试使用 */
   function generateSync(difficultyId, seed) {
@@ -135,7 +154,7 @@
     const rng = B.makeRng(seed === undefined || seed === null ? String(Date.now()) + '-' + Math.random() : String(seed));
     let best = null;
 
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
       const solution = SD.Solver.randomFullGrid(rng);
       const puzzle = solution.slice();
 
@@ -166,7 +185,7 @@
   async function generate(difficultyId, seed, onProgress) {
     const cfg = DIFFICULTY[difficultyId] || DIFFICULTY.easy;
     const rng = B.makeRng(seed === undefined || seed === null ? String(Date.now()) + '-' + Math.random() : String(seed));
-    const ATTEMPTS = 5;
+    const ATTEMPTS = 12;
     let best = null;
 
     for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
