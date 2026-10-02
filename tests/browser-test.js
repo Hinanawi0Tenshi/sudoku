@@ -373,14 +373,14 @@ async function main() {
   })()`);
 
   await step('批量题库五档数量与题面去重', `(function(){
-    var want = { easy: 1000, medium: 1000, hard: 1000, expert: 1000, master: 200 };
+    var want = { easy: 1000, medium: 1000, hard: 1000, expert: 1000, master: 1000 };
     var bad = [];
     for (const diff of SD.BankBig.ORDER) {
       var n = SD.BankBig.countOf(diff);
       if (n !== want[diff]) bad.push(diff + ' ' + n + '/' + want[diff]);
       if (SD.BankBig.gridsOf(diff).size !== n) bad.push(diff + ' 题面有重复');
     }
-    return { ok: bad.length === 0, info: bad.length ? bad.join('；') : '五档 4200 道，题面无重复' };
+    return { ok: bad.length === 0, info: bad.length ? bad.join('；') : '五档 5000 道，题面无重复' };
   })()`);
 
   await step('题库每道题都合法且唯一解', `(function(){
@@ -651,7 +651,12 @@ async function main() {
     const on = strip.querySelector('.hint-chip.is-on');
     const visible = on.offsetLeft >= strip.scrollLeft - 1 && on.offsetLeft + on.offsetWidth <= strip.scrollLeft + strip.clientWidth + 1;
     return { ok: scrolledBefore && backToTop && visible,
-             info: '读到底=' + scrolledBefore + '，换解法后回到顶=' + backToTop + '，选中的技巧在可视范围=' + visible };
+             info: '读到底=' + scrolledBefore + '，换解法后回到顶=' + backToTop
+               + '，选中项在可视范围=' + visible
+               + '（选中第 ' + chips.length + ' 条中的 ' + Array.from(strip.children).indexOf(on)
+               + '，chip宽 ' + on.offsetWidth + '，strip可视宽 ' + strip.clientWidth
+               + '，scrollLeft=' + strip.scrollLeft + '，offsetLeft=' + on.offsetLeft
+               + '，内容宽 ' + strip.scrollWidth + '）' };
   })()`);
   await step('备局时不会把人拽出首页', `(async function(){
     const fresh = SD.Generator.generateSync('easy', 'keep-view');
