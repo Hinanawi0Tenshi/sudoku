@@ -28,7 +28,7 @@
    * @param {number} limit 找到这么多个解就提前停止
    * @returns {{count:number, solution:Uint8Array|null, nodes:number, exhausted:boolean}}
    */
-  function solve(grid, limit = 2) {
+  function solve(grid, limit = 2, rng) {
     const g = Uint8Array.from(grid);
     const m = emptyMasks();
     let nodes = 0;
@@ -78,6 +78,35 @@
       const c = B.COL_OF[best];
       const x = B.BOX_OF[best];
       let mask = bestMask;
+      if (rng) {
+        // 随机试数字的顺序：确定性回溯在空盘上永远返回同一个解，
+        // 那样生成出来的每一道题解出来都一样。
+        const bits = [];
+        let mm = mask;
+        while (mm) {
+          const lb = mm & -mm;
+          mm ^= lb;
+          bits.push(lb);
+        }
+        for (let k = bits.length - 1; k > 0; k--) {
+          const j = (rng() * (k + 1)) | 0;
+          const t = bits[k]; bits[k] = bits[j]; bits[j] = t;
+        }
+        for (const lb of bits) {
+          nodes++;
+          g[best] = Math.round(Math.log2(lb)) + 1;
+          m.row[r] |= lb;
+          m.col[c] |= lb;
+          m.box[x] |= lb;
+          const stop = rec();
+          m.row[r] &= ~lb;
+          m.col[c] &= ~lb;
+          m.box[x] &= ~lb;
+          g[best] = 0;
+          if (stop) return true;
+        }
+        return false;
+      }
       while (mask) {
         const lb = mask & -mask;
         mask ^= lb;
@@ -100,9 +129,9 @@
     return { count, solution: first, nodes, exhausted: count < limit };
   }
 
-  /** 只要一个解；无解返回 null */
-  function solveOne(grid) {
-    const r = solve(grid, 1);
+  /** 只要一个解；无解返回 null。传 rng 可让搜索顺序随机化。 */
+  function solveOne(grid, rng) {
+    const r = solve(grid, 1, rng);
     return r.solution;
   }
 
@@ -121,9 +150,21 @@
     return solveOne(empty);
   }
 
+  /**
+   * 随机生成一个完整合法终盘。
+   * 直接在空盘上做随机顺序回溯：确定性回溯每次都会返回同一个规范解
+   * （123456789 / 456789123 / 789123456 那个循环格），那样每一道题解出来都一样。
+   * 早先的写法是先撒 30% 随机数再求解，但那些盘面经常自带冲突、根本没有解，
+   * 于是每次都退回空盘求解——终盘因此完全固定。
+   */
+  function randomFullGrid(rng) {
+    const s = solveOne(new Uint8Array(B.CELL_COUNT), rng);
+    return s || solveOne(new Uint8Array(B.CELL_COUNT), rng);
+  }
+
   /** 基于给定终盘，随机回溯出一条到达它的合法填法（用于终盘多样化） */
   function randomizedSolve(grid, rng, limit = 2) {
-    return solve(grid, limit);
+    return solve(grid, limit, rng);
   }
 
   SD.Solver = { solve, solveOne, randomFullGrid };

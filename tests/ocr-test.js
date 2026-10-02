@@ -9,7 +9,15 @@ const profile = path.join(os.tmpdir(), 'sd-ocr2-' + Date.now());
 
 const MAKE = (mode) => `(function () {
   const SIZE = 760, CS = 66, INNER = CS * 9;
-  const givens = SD.Generator.generateSync('medium', 'fixture-' + '${mode}').givens;
+  // 夹具题面写死，不从生成器取。
+  // 曾经挂在 generateSync 上：所有题共用同一个终盘时夹具永远是顺子图、
+  // 恰好避开 6/8/9 这些易混字形；生成器修好后换成另一道题，就误识了一个。
+  // OCR 测试要验的是识别能力，不该被出题逻辑带着走。
+  const FIXTURES = {
+    clean: '.374865..|8..95..4.|5.6......|.......1.|.84.....3|2....7...|69.8..1.2|.......76|17..95438',
+    photo: '.9...5...|285.36..4|...82.73.|.792....1|.13.8..2.|8....1...|....1.2.7|.2165....|..84.2...',
+  };
+  const givens = SD.Base.stringToGrid(FIXTURES['${mode}']);
   // 先画正着的标准盘面
   const flat = document.createElement('canvas');
   flat.width = INNER; flat.height = INNER;

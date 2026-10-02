@@ -369,6 +369,29 @@ section('生成器难度分布');
   console.log('    ' + rows.join('\n    '));
 }
 
+section('终盘多样性：每道题的解不能都长得一样');
+{
+  // 曾经踩过的坑：生成器先撒 30% 随机数再求解，那些盘面经常自带冲突、根本没有解，
+  // 于是每次都退回空盘求解；而空盘 + 确定性回溯永远返回同一个规范解（循环格），
+  // 结果每一道题解出来完全一样。只查「题面不同」是查不出来的，必须查解。
+  for (const diff of Generator.DIFFICULTY_ORDER) {
+    const givens = new Set();
+    const sols = new Set();
+    for (let i = 0; i < 8; i++) {
+      const gen = Generator.generateSync(diff, null);
+      givens.add(B.gridToString(gen.givens));
+      sols.add(B.gridToString(gen.solution));
+    }
+    eq(givens.size, 8, diff + ' 连出 8 道题面互不相同');
+    eq(sols.size, 8, diff + ' 连出 8 道题的解也互不相同');
+  }
+  const days = new Set();
+  for (const d of ['2026-09-28', '2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03']) {
+    days.add(B.gridToString(Generator.generateSync('medium', Generator.dailySeed(new Date(d + 'T00:00:00'))).solution));
+  }
+  eq(days.size, 6, '每日挑战 6 天的解互不相同');
+}
+
 section('生成器');
 {
   for (const d of Generator.DIFFICULTY_ORDER) {
