@@ -118,6 +118,23 @@
       ])
     );
     danger.appendChild(el('p', { text: '只重置偏好，不动统计和当前这局。' }));
+    danger.appendChild(
+      el('div.btn-row', null, [
+        el('button.btn.btn-warn', {
+          text: '清除本机全部数据',
+          onclick: () => {
+            // 二次确认：这一下会把统计、每日挑战连胜、图鉴进度全清掉，不可撤销
+            if (!confirm('会清掉统计、每日挑战连胜、我的题库和卡牌进度，且无法恢复。确定吗？')) return;
+            if (!confirm('真的确定？建议先去「数据」页导出备份。')) return;
+            SD.Store.resetAll();
+            location.reload();
+          },
+        }),
+      ])
+    );
+    danger.appendChild(
+      el('p', { text: '换过出题算法后若发现题目还是老的，用这个清一次即可。也可以直接用浏览器清除本站点数据。' })
+    );
     root.appendChild(danger);
   }
 

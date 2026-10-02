@@ -73,7 +73,22 @@
    * 题面来源标记。换生成器时它必须跟着变，旧存档才会被判过期而丢弃。
    * 与 SD_BUILD 分开：发一次包不等于换了生成逻辑。
    */
-  const GEN_VERSION = 2;
+  /**
+   * 生成器指纹：用固定种子出一道最简单的题，它的长相就是这一代生成器的身份。
+   *
+   * 不写死版本号，是因为那要靠人记得每次改生成逻辑都同步改一遍——漏一次，
+   * 玩家就会一直看着旧题面，还以为修复没生效。改成从行为本身取指纹：
+   * 生成逻辑一变指纹就变，旧存档自动作废，不需要任何人记得。
+   * 出题是确定性的（同种子同结果），所以指纹稳定；easy 档只要两毫秒。
+   */
+  function generatorStamp() {
+    try {
+      const g = SD.Generator.generateSync('easy', 'generator-stamp-probe');
+      return String(g.clueCount) + ':' + SD.Base.gridToString(g.givens).slice(0, 24);
+    } catch (e) {
+      return 'unknown';
+    }
+  }
 
   function flush() {
     try {
@@ -114,15 +129,18 @@
   function loadGame() {
     const g = state.game;
     if (!g || !g.givens) return null;
-    if (g.genVersion !== GEN_VERSION) {
+    if (g.genStamp !== generatorStamp()) {
       state.game = null;
       save();
       return null;
     }
     return g;
   }
-
-  /* ---------------- 我的题库 ---------------- */
+  /** 给存档补上当前这一代生成器的指纹 */
+  function stampGame(game) {
+    game.genStamp = generatorStamp();
+    return game;
+  }
   /**
    * 用户从照片存进来的题目。单独一个顶层键，不混进 stats：
    * stats 的形状会在数据面板里整块导出，掺进题目数组会撑破它的表格。
@@ -332,6 +350,8 @@
     stats: stats,
     saveGame: saveGame,
     loadGame: loadGame,
+    stampGame: stampGame,
+    generatorStamp: generatorStamp,
     recordGame: recordGame,
     recordTechnique: recordTechnique,
     dailyStats: dailyStats,

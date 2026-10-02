@@ -196,8 +196,9 @@
       mistakes: st.mistakes,
       elapsed: game.elapsedMs(),
       techniques: st.techniques,
-      // 题面来源标记：换过生成器之后，旧存档该被丢弃而不是反复恢复出来
-      genVersion: 2,
+      // 题面来源指纹。指纹由生成器自己算出——改了生成逻辑它就变，
+      // 旧存档自动作废，不需要谁记得同步改版本号。
+      genStamp: SD.Store.generatorStamp(),
     });
     if (st.meta.dailyKey && !st.won) {
       let filled = 0;
