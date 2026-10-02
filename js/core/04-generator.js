@@ -32,6 +32,10 @@
   const isUnique = (grid) => SD.Solver.solve(grid, 2).count === 1;
   const solvableAt = (grid, level) => SD.Rater.rate(grid, { maxLevel: level }).solved;
 
+  // 难度下限：这道题不该被「比 harderThan 更简单的技巧」解开。
+  // harderThan 为 0（入门）表示不设下限。
+  const meetsFloor = (grid, cfg) => !cfg.harderThan || !solvableAt(grid, cfg.harderThan);
+
   /** 补线索，把题目拉回 ≤maxLevel 的人类可解范围 */
   function easeDown(puzzle, solution, rng, maxLevel) {
     const cells = B.shuffle(Array.from({ length: B.CELL_COUNT }, (_, i) => i), rng);
@@ -52,10 +56,17 @@
   function digToLevel(puzzle, rng, cfg) {
     const order = B.shuffle(Array.from({ length: B.CELL_COUNT }, (_, i) => i), rng);
     let last = null;
+    const target = cfg.clues[0];
+    // 线索数到达目标后还要继续往下挖，直到难度下限达成。
+    // 只挖到 32 格就收工的话，这道题往往仍是唯一余数能解完的，配不上「简单」标签。
+    // 下探设一个余量，免得为了凑难度把题挖成需要试错的题。
+    const floor = target - 8;
 
     for (const i of order) {
       if (!puzzle[i]) continue;
-      if (countClues(puzzle) <= cfg.clues[0]) break;
+      const clues = countClues(puzzle);
+      if (clues <= floor) break;
+      if (clues <= target && meetsFloor(puzzle, cfg)) break;
 
       const backup = puzzle[i];
       puzzle[i] = 0;
@@ -69,12 +80,13 @@
         puzzle[i] = backup;
         continue;
       }
-      if (cfg.harderThan && !solvableAt(puzzle, cfg.harderThan)) {
-        return { reached: true, rating: hard };
-      }
+      if (meetsFloor(puzzle, cfg)) return { reached: true, rating: hard };
       last = hard;
     }
-    return { reached: false, rating: last || SD.Rater.rate(puzzle, { maxLevel: cfg.maxLevel }) };
+    // 没达���难度下限时，评级必须按最终盘面重算。
+    // 沿用挖洞途中那个 last 会让标称评级和实际盘面对不上，
+    // 上层按 score 挑「最好的」时就会挑错题。
+    return { reached: false, rating: SD.Rater.rate(puzzle, { maxLevel: cfg.maxLevel }) };
   }
 
   /** 入门题：挖到目标线索数即可，重点是「只用唯一余数也能解完」 */
