@@ -275,22 +275,26 @@
   function dailyChallenge(seed) {
     showOverlay('正在生成每日挑战…', '同一天全球拿到的是同一道题。');
     setTimeout(() => {
-      SD.Generator.generate('medium', seed, () => {}).then((gen) => {
-        hideOverlay();
-        startWith(gen.givens, {
-          difficulty: gen.difficulty,
-          difficultyName: '每日挑战',
-          rating: gen.rating,
-          clueCount: gen.clueCount,
-          seed: seed,
-          dailyKey: seed,
-          title: '每日挑战 · ' + seed.slice(6),
-        }, gen.solution);
-      }, (e) => {
-        // 静默失败会让遮罩永远留在屏幕上，用户只看到点了一下没反应
+      // 等级在 L2~L3 之间按日期定，纯同步但比普通出题慢一些。
+      // 放在 setTimeout 里是为了先让遮罩画出来，不然会像卡住不动。
+      let gen = null;
+      try {
+        gen = SD.Generator.generateDailySync(seed);
+      } catch (e) {
         hideOverlay();
         toast('每日挑战出题失败：' + e.message, 'err');
-      });
+        return;
+      }
+      hideOverlay();
+      startWith(gen.givens, {
+        difficulty: gen.difficulty,
+        difficultyName: '每日挑战',
+        rating: gen.rating,
+        clueCount: gen.clueCount,
+        seed: seed,
+        dailyKey: seed,
+        title: '每日挑战 · ' + seed.slice(6),
+      }, gen.solution);
     }, 30);
   }
 
@@ -393,19 +397,10 @@
    */
   function refillQueue(diff) {
     if (!diff || !SD.Generator.DIFFICULTY[diff]) return;
+    // 题全部在本地现生成，不再从预生成题库里抽。
+    // 那个 5000 道题库实测 95% 是唯一余数法，当不了分级依据；
+    // 而玩家真正要的「做一题就存下来」由本地的我的题库承担。
     const gen = () => {
-      // 优先从批量题库里抽：那里有几千道已复核过的题，抽中就是零成本，
-      // 而且不会再和「已经出现过」的题相撞——题库本身就是去重过的全集。
-      if (SD.BankBig && SD.BankBig.countOf(diff)) {
-        const bank = SD.BankBig.randomOf(diff);
-        if (bank) {
-          const used = SD.Store.usedGrids();
-          for (let i = 0; i < 20 && used[bank.grid]; i++) bank = SD.BankBig.randomOf(diff);
-          if (bank && !used[bank.grid]) {
-            return { grid: bank.grid, clues: bank.clueCount, level: bank.level };
-          }
-        }
-      }
       const g = SD.Generator.generateSync(diff, null);
       return { grid: B.gridToString(g.givens), clues: g.clueCount, level: g.level };
     };
@@ -422,7 +417,12 @@
   function noteDailyGrid() {
     if (dailyNoted) return;
     dailyNoted = true;
-    SD.Store.noteGridUsed(B.gridToString(SD.Generator.generateSync('medium', SD.Generator.dailySeed()).givens));
+    try {
+      const g = SD.Generator.generateDailySync(SD.Generator.dailySeed());
+      SD.Store.noteGridUsed(B.gridToString(g.givens));
+    } catch (e) {
+      // 记指纹只是去重优化，出不来也不该拦住玩家做题
+    }
   }
 
   function playQueueItem(item) {
@@ -436,37 +436,19 @@
   }
 
   function openBankPage(root) {
-    root.appendChild(el('p.lead', { text: '精选题目点一下就上盘；也可以从照片把题读出来，存进你自己的题库。' }));
+    root.appendChild(el('p.lead', { text: '题目都由本机现出：做过的自动存进「我的题库」，也可以从照片把题读进来。' }));
     root.appendChild(el('h3.sec-title', { text: '从图片添加' }));
     const ocrBox = el('div.ocr-box');
     root.appendChild(ocrBox);
     root.appendChild(el('h3.sec-title', { text: '待做题' }));
-    root.appendChild(el('p.lead', { text: '每档自动攒 ' + QUEUE_KEEP + ' 道，做完一道立刻补一道。题目不会和题库、每日挑战重复。' }));
+    root.appendChild(el('p.lead', { text: '每档留 ' + QUEUE_KEEP + ' 个空位，点「开始」才现出一道题；做完一个自动补上一个。' }));
     const queueBox = el('div.bank-list');
     root.appendChild(queueBox);
 
     root.appendChild(el('h3.sec-title', { text: '我的题库' }));
+    root.appendChild(el('p.lead', { text: '做过的题会自动留在这里，下次可以直接重做。' }));
     const mine = el('div.bank-list');
     root.appendChild(mine);
-    root.appendChild(el('h3.sec-title', { text: '精选题目' }));
-    const list = el('div.bank-list');
-    for (const p of SD.Bank.LIST) {
-      const info = SD.Bank.describe(p);
-      list.appendChild(
-        el('button.bank-item', {
-          onclick: () => { playBank(p.id); },
-        }, [
-          el('div.bi-main', null, [
-            el('b.bi-name', { text: p.name }),
-            el('span.bi-band', { text: info.band }),
-            info.needsGuess ? el('span.bi-warn', { text: '需试错' }) : null,
-          ]),
-          el('div.bi-meta', { text: info.clueCount + ' 个线索' }),
-          el('div.bi-note', { text: p.note }),
-        ])
-      );
-    }
-    root.appendChild(list);
 
     SD.OCR.mount(ocrBox, {
       applyImported: applyImported,
@@ -543,17 +525,6 @@
     }
   }
 
-  function playBank(id) {
-    const p = SD.Bank.byId(id);
-    if (!p) return;
-    const info = SD.Bank.describe(p);
-    if (applyImported(p.grid, null, { source: '题库' })) {
-      game.state.meta.title = p.name;
-      game.state.meta.difficultyName = info.band;
-      render();
-      showView('game');
-    }
-  }
   function playUserPuzzle(p) {
     if (applyImported(p.grid, null, { source: '我的题库' })) {
       game.state.meta.title = p.name;
@@ -815,7 +786,7 @@
   }
 
 
-  SD.App = { getGame: () => game, render: render, applyImported: applyImported, newGame: newGame, loadImported: loadImported, showView: showView, playBank: playBank, openPage: openPage, startWith: startWith, setHintOpen: setHintOpen };
+  SD.App = { getGame: () => game, render: render, applyImported: applyImported, newGame: newGame, loadImported: loadImported, showView: showView, openPage: openPage, startWith: startWith, setHintOpen: setHintOpen };
 
   /* ---------------- 事件接线与启动 ---------------- */
   /** 讲解里的【R2C6】指到哪一格，棋盘就点亮哪一格；触屏没有 hover，用长按代替 */

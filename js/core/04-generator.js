@@ -286,6 +286,101 @@
     return SD.Rater.rate(puzzle, { maxLevel: cfg.maxLevel });
   }
 
+  /**
+   * 每日挑战：等级在 L2~L3 之间按日期随机，既不会纯余数法秒杀，也不至于变成硬仗。
+   *
+   * 等级是双边约束，缺一不可：
+   *   下限 —— 不能被比目标等级更简单的技巧解完，否则退化成纯余数法；
+   *   上限 —— 必须在目标等级内解完，否则名义 L2 实际是 L4，天天劝退。
+   * 只卡等级还不够。隐性唯一余数本身也记 L2，光看等级的话，
+   * 一道从头到尾只靠两种余数法的题照样「达标」——正是玩家嫌简单的那种。
+   * 所以额外数一遍「非余数法」的步数：区块摒除、数对、三链列这些才算数。
+   */
+  const DAILY_TARGETS = { 2: { name: '基础区块', minTech: 2 }, 3: { name: '进阶区块', minTech: 3 } };
+  const SINGLES = { 'naked-single': 1, 'hidden-single': 1 };
+
+  /** 当天的目标等级。只由种子决定，保证全球同一天拿到同一道题。 */
+  function dailyLevel(seed) {
+    return B.makeRng(String(seed) + '|daily-level')() < 0.5 ? 2 : 3;
+  }
+
+  /** 走一遍完整解法，数出真正要动脑（非余数法）的技巧一共走了多少步 */
+  function techStepsAtLeast(grid) {
+    const r = SD.Rater.rate(grid, { maxLevel: 5 });
+    if (!r.solved) return -1;
+    let n = 0;
+    for (const b of r.breakdown) if (!SINGLES[b.id]) n += b.count;
+    return n;
+  }
+
+  /** 这道题是否够格上当天的每日挑战 */
+  function fitsDaily(puzzle, target) {
+    if (!solvableAt(puzzle, target)) return false;
+    if (solvableAt(puzzle, target - 1)) return false;
+    return techStepsAtLeast(puzzle) >= DAILY_TARGETS[target].minTech;
+  }
+
+  /**
+   * 出每日挑战。
+   *
+   * 顺序是「先按目标等级挖到够稀，再看技巧密度」而不是边挖边判——
+   * 密度要等挖得足够深才起得来，每挖一格就判等于永远判不中。
+   * 多轮候选里挑最合格的一道：等级双边达标是硬条件，
+   * 技巧密度按超标程度打分择优，这样即使没人完全达标也能挑到最好的。
+   */
+  function generateDailySync(seed) {
+    const target = dailyLevel(seed);
+    const minTech = DAILY_TARGETS[target].minTech;
+    const rng = B.makeRng(String(seed) + '|daily');
+    let best = null;
+
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const solution = SD.Solver.randomFullGrid(rng);
+      const puzzle = solution.slice();
+      // 先按目标等级的常规下限挖：不能被 target-1 解完是硬要求。
+      digToLevel(puzzle, rng, { clues: [30, 38], maxLevel: target, harderThan: target - 1 });
+      // 再往下多挖一截，逼出更多真技巧；每挖几格验一次唯一解。
+      const order = B.shuffle(Array.from({ length: B.CELL_COUNT }, (_, i) => i), rng);
+      for (const i of order) {
+        if (!puzzle[i]) continue;
+        // L3 目标要更稀疏才够得着，给它多挖几格的空间
+        if (countClues(puzzle) <= (target === 3 ? 20 : 24)) break;
+        const backup = puzzle[i];
+        puzzle[i] = 0;
+        if (!isUnique(puzzle)) { puzzle[i] = backup; continue; }
+        // 已经不能被 target 解完，再挖也无法挽回等级，停下换下一轮。
+        if (!solvableAt(puzzle, target)) { puzzle[i] = backup; break; }
+      }
+      if (!solvableAt(puzzle, target) || solvableAt(puzzle, target - 1)) continue;
+      const tech = techStepsAtLeast(puzzle);
+      // 超标的密度优先，其次偏好线索少一点的（通常更耐玩）。
+      const score = Math.min(tech, minTech * 4) * 100 - countClues(puzzle);
+      if (!best || score > best.score) best = { puzzle: puzzle.slice(), solution: solution, score: score };
+      if (tech >= minTech) break;   // 已经达标，不必再试
+    }
+
+    if (!best) {
+      // 连等级双边都凑不齐是极小概率，但不能没有题可出；
+      // 此时给一道目标等级的题，好过让玩家对着空转圈。
+      const solution = SD.Solver.randomFullGrid(rng);
+      const puzzle = solution.slice();
+      digToLevel(puzzle, rng, { clues: [30, 38], maxLevel: target, harderThan: target - 1 });
+      best = { puzzle: puzzle, solution: solution };
+    }
+
+    const rating = SD.Rater.rate(best.puzzle, { maxLevel: 5 });
+    return {
+      givens: best.puzzle,
+      solution: best.solution,
+      difficulty: 'daily',
+      clueCount: countClues(best.puzzle),
+      level: rating.level,
+      rating: rating,
+      target: target,
+      techSteps: techStepsAtLeast(best.puzzle),
+      note: DAILY_TARGETS[target].name,
+    };
+  }
   /** 每日挑战：日期即种子，同一天全球同一道题 */
   function dailySeed(date) {
     const d = date || new Date();
@@ -310,5 +405,5 @@
     return res;
   }
 
-  SD.Generator = { DIFFICULTY, DIFFICULTY_ORDER, generate, generateSync, dailySeed, countClues, inspect };
+  SD.Generator = { DIFFICULTY, DIFFICULTY_ORDER, generate, generateSync, dailySeed, dailyLevel, generateDailySync, techStepsAtLeast, countClues, inspect };
 })(window);

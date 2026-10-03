@@ -403,7 +403,9 @@ async function main() {
 
   await step('换一代生成器后旧存档会被丢弃', `(function(){
     // 模拟「修复前存下的那局」：没有 genVersion 的旧存档
-    SD.Store.saveGame({ givens: SD.Bank.LIST[0].grid, grid: SD.Bank.LIST[0].grid, notes: [], meta: { difficultyName: '旧存档' }, hints: 0, mistakes: 0, elapsed: 0 });
+    var probe = SD.Generator.generateSync('easy', 'old-save-probe');
+    var probeGrid = SD.Base.gridToString(probe.givens);
+    SD.Store.saveGame({ givens: probeGrid, grid: probeGrid, notes: [], meta: { difficultyName: '旧存档' }, hints: 0, mistakes: 0, elapsed: 0 });
     var raw = JSON.parse(localStorage.getItem(Object.keys(localStorage).filter(function (k) { return /sudoku/i.test(k); })[0] || '{}'));
     var key = Object.keys(localStorage).filter(function (k) { return /sudoku/i.test(k); })[0];
     if (key) {
@@ -484,38 +486,32 @@ async function main() {
              info: '填了 ' + filled + '，解法 ' + before + '→' + after + ' 条，面板与重算结果'
                + (recomputed === afterText ? '一致' : '不一致') };
   })()`);
-  await step('批量题库五档数量与题面去重', `(function(){
-    var want = { easy: 1000, medium: 1000, hard: 1000, expert: 1000, master: 1000 };
-    var bad = [];
-    for (const diff of SD.BankBig.ORDER) {
-      var n = SD.BankBig.countOf(diff);
-      if (n !== want[diff]) bad.push(diff + ' ' + n + '/' + want[diff]);
-      if (SD.BankBig.gridsOf(diff).size !== n) bad.push(diff + ' 题面有重复');
-    }
-    return { ok: bad.length === 0, info: bad.length ? bad.join('；') : '五档 5000 道，题面无重复' };
-  })()`);
-
-  await step('题库每道题都合法且唯一解', `(function(){
+  await step('待做题开局的题都合法且唯一解', `(function(){
+    // 待做题现在全部由本机现生成，所以要验的是「生成出来的题」本身合格。
     const bad = [];
-    for (const p of SD.Bank.LIST) {
-      const r = SD.Generator.inspect(SD.Base.stringToGrid(p.grid));
-      if (!r.valid) bad.push(p.name + '：' + r.reason);
+    for (const diff of SD.Generator.DIFFICULTY_ORDER) {
+      for (const q of SD.Store.queueOf(diff)) {
+        const r = SD.Generator.inspect(SD.Base.stringToGrid(q.grid));
+        if (!r.valid) bad.push(diff + '：' + r.reason);
+      }
     }
-    return { ok: bad.length === 0,
-             info: bad.length ? bad.join('; ') : SD.Bank.LIST.length + ' 道全部合法唯一解' };
+    const total = SD.Generator.DIFFICULTY_ORDER.reduce((n, d) => n + SD.Store.queueOf(d).length, 0);
+    return { ok: bad.length === 0 && total > 0,
+             info: bad.length ? bad.join('; ') : total + ' 道待做题全部合法唯一解' };
   })()`);
 
-  await step('从题库能直接开一局', `(async function(){
+  await step('从待做题能直接开一局', `(async function(){
     document.querySelector('.home-item[data-go=bank]').click();
-    await new Promise(res => setTimeout(res, 150));
-    const items = document.querySelectorAll('.bank-item');
-    if (!items.length) return { ok: false, info: '题库页没有题目' };
-    items[items.length - 1].click();
+    await new Promise(res => setTimeout(res, 200));
+    const line = document.querySelector('#page-root .bank-item.is-queue .btn-primary');
+    if (!line) return { ok: false, info: '待做题区没有开始按钮' };
+    line.click();
     await new Promise(res => setTimeout(res, 700));
     const st = SD.App.getGame().state;
     const view = document.documentElement.getAttribute('data-view');
     let locked = 0;
     for (let i = 0; i < 81; i++) if (st.board.grid[i] && st.board.isGiven(i)) locked++;
+    SD.App.showView('home');
     return { ok: view === 'game' && locked > 0,
              info: '标题=' + st.meta.title + '，线索 ' + locked + ' 个，视图=' + view };
   })()`);
@@ -860,10 +856,10 @@ async function main() {
     document.querySelector('.home-item[data-go=bank]').click();
     await new Promise(r => setTimeout(r, 300));
     const drop = document.querySelector('#page-root .ocr-drop');
-    const builtIn = document.querySelectorAll('#page-root .bank-item:not(.is-mine):not(.is-queue)').length;
     const saved = document.querySelectorAll('#page-root .bank-item.is-mine').length;
     // 存一道再退回首页重进，验证它真的落到了存储里并且页面会重画
-    SD.Store.addUserPuzzle(SD.Bank.LIST[2].grid, '我的题目 1', '简单');
+    var own = SD.Generator.generateSync('easy', 'user-bank-fixture');
+    SD.Store.addUserPuzzle(SD.Base.gridToString(own.givens), '我的题目 1', '简单');
     const stored = SD.Store.userBank().length;
     document.getElementById('page-back').click();
     await new Promise(r => setTimeout(r, 120));
@@ -871,8 +867,9 @@ async function main() {
     await new Promise(r => setTimeout(r, 300));
     const mine = document.querySelectorAll('#page-root .bank-item.is-mine').length;
     const playable = !!document.querySelector('#page-root .bank-item.is-mine .btn-primary');
-    return { ok: !!drop && builtIn === SD.Bank.LIST.length && stored === saved + 1 && mine === stored && playable,
-             info: 'OCR 入口=' + !!drop + '，精选 ' + builtIn + ' 道，存入 ' + stored + ' 道，重进页面显示 ' + mine + ' 道，可开始=' + playable };
+    SD.App.showView('home');
+    return { ok: !!drop && stored === saved + 1 && mine === stored && playable,
+             info: 'OCR 入口=' + !!drop + '，存入 ' + stored + ' 道，重进页面显示 ' + mine + ' 道，可开始=' + playable };
   })()`);
 
   await step('透视校正数学正确（合成测试）', `(function(){
