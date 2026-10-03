@@ -294,6 +294,17 @@
     }
     if (x1 < 0) return null;   // 没墨迹
 
+    // 尺寸闸门：印刷体线索的笔画占格子约一半，玩家写的小字笔记只占四分之一上下。
+    // 按墨迹裁剪之后两者都会被放大成整格大小——不卡尺寸，笔记就会被当成线索读进去，
+    // 表现出来就是一格凭空多出一个数字，满盘冲突。
+    const big = Math.max(x1 - x0, y1 - y0) + 1;
+    const cellSize = Math.min(w, h);
+    // 阈值不写死：照片经透视校正和 JPEG 压缩后，印刷体的墨迹同样会缩水，
+    // 固定比例会把真线索一起挡掉（实测照片场景从 28% 掉到 9%）。
+    // 改用「本图里较大的那一簇」当线索：线索字明显大于笔记小字，
+    // 按当图的分布取分界，才扛得住不同清晰度的照片。
+    const isGiven = big >= cellSize * (state.givenRatio || 0.34);
+
     // 四周留白：字形大小要接近训练时的比例，太贴边会掉识别率
     const pad = Math.max(2, Math.round(Math.max(x1 - x0, y1 - y0) * 0.28));
     x0 = Math.max(0, x0 - pad); y0 = Math.max(0, y0 - pad);
@@ -340,21 +351,42 @@
       }
     }
     o.putImageData(img, 0, 0);
+    c.isGiven = isGiven;   // true=印刷体线索，false=小字笔记
+    c.inkSize = big / cellSize;
     return c;
   }
 
   async function recognizePerCell(worker) {
     const ctx = state.extracted.warped.getContext('2d', { willReadFrequently: true });
+    // 先量一遍全图：线索字和笔记小字是两个明显不同的尺寸簇，取中间的分界。
+    // 只看有墨迹的格——空格子没有尺寸可言。
+    {
+      const sizes = [];
+      for (const cell of state.extracted.cells) {
+        const probe = cropCell(ctx, cell, 16);
+        if (probe && probe.inkSize) sizes.push(probe.inkSize);
+      }
+      sizes.sort((a, b) => a - b);
+      if (sizes.length >= 4) {
+        // 取上四分位与中位数的均值：线索字一定落在这之上
+        const q = sizes[Math.floor(sizes.length * 0.75)];
+        const med = sizes[Math.floor(sizes.length * 0.5)];
+        state.givenRatio = Math.max(0.20, Math.min(0.60, (q + med) / 2));
+      }
+    }
     const hits = new Array(81).fill(null);
     const retry = [];
+    const pencils = [];   // 判为用户小字笔记的格子
     let tried = 0;
 
     for (const cell of state.extracted.cells) {
       if (cell.ink < 0.008) continue;
       tried++;
       const tile = cropCell(ctx, cell, 64);
-      const r = await worker.recognize(tile, {}, { blocks: false, tsv: false, text: true });
       if (!tile) continue;   // 这格没墨迹，交给整幅识别兜底
+      // 小字笔记不是题面的一部分，不送进 OCR 当线索
+      if (!tile.isGiven) { pencils.push(cell); continue; }
+      const r = await worker.recognize(tile, {}, { blocks: false, tsv: false, text: true });
       const d = onlyDigit((r.data && r.data.text) || '');
       if (d) hits[cell.index] = { digit: d, conf: (r.data && r.data.confidence) || 0 };
       else retry.push(cell);
@@ -366,6 +398,7 @@
       await worker.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: '8' });
       for (const cell of retry) {
         const tile = cropCell(ctx, cell, 64);
+        if (!tile || !tile.isGiven) continue;   // 同样只认印刷体
         const r = await worker.recognize(tile, {}, { blocks: false, tsv: false, text: true });
         const raw = String((r.data && r.data.text) || '').trim();
         if (/^[0-9]$/.test(raw)) {
