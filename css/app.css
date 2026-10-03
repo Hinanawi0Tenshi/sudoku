@@ -30,6 +30,8 @@
   --focus: #2f6fed;
   --hint: #f59e0b;
   --hint-soft: #fff4d6;
+  /* 技巧高亮：蓝底表示「这格是技巧盯着的」，红底表示「这格要删候选」 */
+  --tech-soft: #e3eeff;
 
   --radius: 12px;
   --radius-sm: 8px;
@@ -66,6 +68,8 @@
   --focus: #5b8cff;
   --hint: #fbbf24;
   --hint-soft: #3d3313;
+  /* 技巧高亮：蓝底表示「这格是技巧盯着的」，红底表示「这格要删候选」 */
+  --tech-soft: #16304f;
 
   --box-line: #8c96a4;
   --box-tint: #1a1e25;
@@ -94,6 +98,8 @@
   --focus: #14876a;
   --hint: #d98324;
   --hint-soft: #fdeeda;
+  /* 技巧高亮：蓝底表示「这格是技巧盯着的」，红底表示「这格要删候选」 */
+  --tech-soft: #e6efff;
 
   --box-line: #5d7a6c;
   --box-tint: #e6f0ea;
@@ -123,6 +129,8 @@
   --focus: #c2601f;
   --hint: #b8860b;
   --hint-soft: #fbf0d0;
+  /* 技巧高亮：蓝底表示「这格是技巧盯着的」，红底表示「这格要删候选」 */
+  --tech-soft: #e8f0ff;
 
   --box-line: #8a7156;
   --box-tint: #f2e9dc;
@@ -153,6 +161,8 @@
   --focus: #ffd400;
   --hint: #ff9f0a;
   --hint-soft: #2e2000;
+  /* 技巧高亮：蓝底表示「这格是技巧盯着的」，红底表示「这格要删候选」 */
+  --tech-soft: #122840;
 
   --box-line: #9a9a9a;
   --box-tint: #141414;
@@ -183,6 +193,8 @@
   --focus: #6ee7a8;
   --hint: #f5c451;
   --hint-soft: #362c11;
+  /* 技巧高亮：蓝底表示「这格是技巧盯着的」，红底表示「这格要删候选」 */
+  --tech-soft: #152a45;
 
   --box-line: #7d938a;
   --box-tint: #141f1a;
@@ -219,6 +231,8 @@
     --focus: #5b8cff;
     --hint: #fbbf24;
     --hint-soft: #3d3313;
+  /* 技巧高亮：蓝底表示「这格是技巧盯着的」，红底表示「这格要删候选」 */
+  --tech-soft: #16304f;
     --box-line: #8c96a4;
     --box-tint: #1a1e25;
   }
@@ -661,7 +675,12 @@ button.brand:hover { opacity: .72; }
 .cell.is-same { background: var(--same); }
 .cell.is-conflict { background: var(--conflict); }
 .cell.is-selected { box-shadow: inset 0 0 0 2px var(--focus); }
-.cell.is-hint { background: var(--hint-soft); }
+/* 技巧盯着的格子用蓝底；删候选的格子用红底。两种含义必须一眼分得开 */
+.cell.is-hint { background: var(--tech-soft); }
+.cell.is-elim {
+  background: var(--conflict);
+  box-shadow: inset 0 0 0 2px var(--conflict-text);
+}
 .cell.is-hint::after {
   content: ""; position: absolute; inset: 0;
   border: 2px dashed var(--hint); border-radius: 2px;

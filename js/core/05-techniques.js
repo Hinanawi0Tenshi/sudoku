@@ -1758,6 +1758,24 @@
     step.level = t.level;
     step.category = t.category;
     step.tagline = t.tagline;
+    // 高亮集合一律在这里补齐。原先靠各技巧自己填 cells，
+    // 没填的（大多数）就完全没有坐标指示，玩家只能对着文字猜是哪几格。
+    // 从这一步自己的数据推：焦点格、标注格、出数格，以及不太大的整条区域。
+    if (!step.cells || !step.cells.length) {
+      const s = new Set();
+      if (step.focusCell != null && step.focusCell >= 0) s.add(step.focusCell);
+      for (const m of step.marks || []) s.add(m.cell);
+      for (const p of step.placements || []) s.add(p.cell);
+      // 整行整列整宫超过 12 格就不逐格铺：那会满屏都是颜色，反而看不出重点
+      const unitCells = [];
+      for (const u of step.units || []) for (const i of u) unitCells.push(i);
+      if (unitCells.length && unitCells.length <= 12) for (const i of unitCells) s.add(i);
+      step.cells = Array.from(s);
+    }
+    // 删候选的格子单独成一组：它和「技巧盯着的格子」是两种含义，颜色必须区分开
+    const elimSet = new Set();
+    for (const e of step.eliminations || []) elimSet.add(e.cell);
+    step.elimCells = Array.from(elimSet);
     return step;
   }
 

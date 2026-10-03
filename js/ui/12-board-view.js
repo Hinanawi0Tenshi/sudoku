@@ -59,11 +59,16 @@
       const selBox = sel >= 0 ? B.BOX_OF[sel] : -1;
       const conflicts = u.conflicts || new Map();
       const hintCells = u.hint ? new Set(u.hint.cells || []) : null;
+      // 删候选的格子：红色。技巧盯着的格子：蓝色。两者含义不同，必须分开。
+      const elimCells = u.hint ? new Set(u.hint.elimCells || []) : null;
       const hintMarks = new Map();
       if (u.hint) {
         for (const m of u.hint.marks || []) hintMarks.set(m.cell + ':' + m.digit, 'keep');
         for (const e of u.hint.eliminations || []) hintMarks.set(e.cell + ':' + e.digit, 'elim');
         for (const p of u.hint.placements || []) hintMarks.set(p.cell + ':' + p.digit, 'place');
+        if (!u.hint.elimCells && u.hint.eliminations) {
+          for (const e of u.hint.eliminations) elimCells.add(e.cell);
+        }
       }
 
       for (let i = 0; i < B.CELL_COUNT; i++) {
@@ -87,6 +92,8 @@
         if (bad) cls += ' is-conflict';
         if (i === sel) cls += ' is-selected';
         if (hintCells && hintCells.has(i)) cls += ' is-hint';
+        // 红盖过蓝：同一格既被技巧盯着又要删候选时，红色是更该被看见的信息
+        if (elimCells && elimCells.has(i)) cls += ' is-elim';
         if (u.hintPlaced && u.hintPlaced.has(i)) cls += ' is-hint-value';
         if (refCells.has(i)) cls += ' is-ref';
         c.className = 'cell' + staticCls[i] + cls;
