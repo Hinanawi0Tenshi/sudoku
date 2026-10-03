@@ -90,6 +90,8 @@
           }
         }
         if (bad) cls += ' is-conflict';
+        // 填错的格子：数字留在盘上，只把字染红（红字，不是红底）
+        if (u.wrong && u.wrong.has(i)) cls += ' is-wrong';
         if (i === sel) cls += ' is-selected';
         if (hintCells && hintCells.has(i)) cls += ' is-hint';
         // 红盖过蓝：同一格既被技巧盯着又要删候选时，红色是更该被看见的信息

@@ -1385,3 +1385,6 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
 }
 .mini-board .mc, .mini-board .mr { background: var(--surface-2); }
 .bank-item.is-mine { align-items: center; }
+/* 填错的格子：数字留在盘上，字染红。不阻断，也不换底色——
+   底色留给「技巧格」蓝和「删候选」红两种含义，这里只用字色区分 */
+.cell.is-wrong .cell-value { color: var(--conflict-text); font-weight: 700; }

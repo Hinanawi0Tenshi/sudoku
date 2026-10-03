@@ -10,6 +10,9 @@
 
   const HISTORY_LIMIT = 400;
 
+  /** 容错次数。超过后不再替玩家抹掉数字，改为给一次继续的机会。 */
+  const MISTAKE_LIMIT = 3;
+
   function create(handlers) {
     const h = handlers || {};
     const st = {
@@ -73,6 +76,9 @@
         locked: st.board.locked.slice(),
         hints: st.hints,
         mistakes: st.mistakes,
+        // 红标要跟着存档走：漏了它，刷新一次错过的格子就恢复正常色，
+        // 玩家会以为系统没标出来
+        wrong: Array.from(st.wrongCells),
         techniques: st.techniques.slice(),
         elapsed: elapsedMs(),
       };
@@ -100,6 +106,7 @@
       st.board.locked.set(s.locked);
       st.hints = s.hints;
       st.mistakes = s.mistakes;
+      st.wrongCells = new Set(s.wrong || []);
       st.techniques = s.techniques.slice();
       if (!st.running) st.elapsed = s.elapsed;
     }
@@ -152,11 +159,12 @@
     function afterMove(i) {
       const conf = conflicts();
       if (conf.has(i) && SD.Store.settings().mistakeCheck && !st.board.isGiven(i)) {
-        st.board.grid[i] = 0;
-        st.board.filled[i] = 0;
+        // 不阻断：数字留在盘上，只把这一格记为填错。
+        // 抹掉数字等于替玩家擦答案，反而让人不知道自己错在哪。
         if (!st.wrongCells.has(i)) {
           st.wrongCells.add(i);
           st.mistakes++;
+          if (st.mistakes >= MISTAKE_LIMIT) emit('mistakeLimit');
         }
       }
 
@@ -371,6 +379,8 @@
       undo: undo,
       redo: redo,
       conflicts: conflicts,
+      wrongCells: () => st.wrongCells,
+      mistakeLimit: MISTAKE_LIMIT,
       checkWin: checkWin,
       hint: hint,
       hintList: hintList,

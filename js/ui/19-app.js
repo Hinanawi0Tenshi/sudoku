@@ -46,6 +46,7 @@
       highlightSame: s.highlightSame,
       highlightPeer: s.highlightPeer,
       conflicts: game.conflicts(),
+      wrong: game.wrongCells(),
       hint: st.hint && st.hint.step ? st.hint.step : null,
       hintPlaced: st.hint ? st.hint.placedCells : null,
     });
@@ -175,6 +176,47 @@
   /**
    * @param {boolean} keepView 保持当前视图。冷启动会先在后台备好一局，
    *   但玩家还站在首页，不能因为「备好了」就把他拽进游戏页。
+  let mistakeAsked = false;
+
+  /**
+   * 填错超过上限后的选择：再给一次机会，或者同难度直接换一局。
+   * 两种都不惩罚——数独是练习工具，卡死不如重来。
+   */
+  function askAfterMistakes() {
+    if (mistakeAsked || game.state.won) return;
+    mistakeAsked = true;
+    const diff = game.state.meta.difficulty || 'medium';
+    const limit = game.mistakeLimit;
+    const body = el('p.lead', {
+      text: '已经填错 ' + game.state.mistakes + ' 次（上限 ' + limit + '）。'
+    });
+    body.appendChild(el('p.lead', {
+      text: '错过的格子已经用红色标出来了，可以点「检查」逐个改，也可以直接换一局重来。',
+    }));
+    modal({
+      title: '错得有点多了',
+      body: body,
+      footer: [
+        {
+          label: '同难度换一局',
+          primary: true,
+          onClick: () => {
+            mistakeAsked = false;
+            newGame(diff);
+          },
+        },
+        {
+          label: '再给一次机会',
+          onClick: () => {
+            mistakeAsked = false;
+            toast('继续加油，错了的格子标红');
+          },
+        },
+      ],
+    });
+  }
+  /**
+   * 开一局。keepView 为真时留在当前视图，首页发起时用它避免把人拽走。
    */
   function startWith(givens, meta, solution, keepView) {
     game.start(givens, meta, solution);
@@ -1056,7 +1098,11 @@
     game = SD.Game.create({
       onChange: (kind) => {
         if (kind === 'win') onWin();
+        else if (kind === 'mistakeLimit') askAfterMistakes();
         else if (kind === 'tick') renderStatus();
+        // 落子、选择、撤销重做都要重绘：红字标记、冲突高亮都挂在盘面元素上，
+        // 不重绘的话红标不会出现
+        else render();
       },
       onTick: () => renderStatus(),
     });

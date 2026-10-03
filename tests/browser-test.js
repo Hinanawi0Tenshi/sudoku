@@ -142,24 +142,29 @@ async function main() {
   })()`);
 
   await step('键盘输入数字', `(async function(){
+    // 自带局面：原先沿用上一条用例留下的盘面，新鲜环境下会找不到能制造冲突的数字
+    var fresh = SD.Generator.generateSync('easy', 'keyboard-test');
+    SD.App.startWith(fresh.givens, { difficultyName: '测试' }, fresh.solution);
+    await new Promise(r => setTimeout(r, 120));
     const g = SD.App.getGame();
     function withAt(grid, i, d) { const c = Uint8Array.from(grid); c[i] = d; return c; }
     const i = Array.from(g.state.board.grid).findIndex((v, k) => v === 0 && !g.state.board.isGiven(k));
+    if (i < 0) return { ok: false, info: '没有空格可测' };
     g.select(i);
-    const before = g.state.board.grid[i];
     const wrongDigit = [1,2,3,4,5,6,7,8,9].find(d => g.state.board.grid[i] !== d && SD.Validation.findConflicts(withAt(g.state.board.grid, i, d)).size > 0);
-    const before_conf = wrongDigit ? withAt(g.state.board.grid, i, wrongDigit) : null;
+    if (!wrongDigit) return { ok: false, info: '找不到能制造冲突的数字' };
     g.inputDigit(wrongDigit);
-    await new Promise(r => setTimeout(r, 40));
-    const rejected = g.state.board.grid[i] === before;
-    g.inputDigit(wrongDigit);
-    await new Promise(r => setTimeout(r, 40));
-    g.undo();
-    await new Promise(r => setTimeout(r, 40));
-    return { ok: i >= 0 && rejected,
-             info: '格=' + i + ' 故意填冲突数字 ' + wrongDigit + ' 被即时纠错拒绝=' + rejected };
+    await new Promise(r => setTimeout(r, 60));
+    // 不阻断：数字留在盘上，只把这一格记成填错并标红
+    const kept = g.state.board.grid[i] === wrongDigit;
+    const marked = g.wrongCells().has(i);
+    const counted = g.state.mistakes > 0;
+    const red = !!document.querySelector('#board .cell.is-wrong');
+    SD.App.showView('home');
+    return { ok: kept && marked && counted && red,
+             info: '格=' + i + ' 填冲突数字 ' + wrongDigit + '：保留=' + kept
+               + '，标红=' + marked + '，有红字样式=' + red + '，计入错误=' + counted };
   })()`);
-
   await step('撤销栈顺序正确（撤销回到上一步）', `(async function(){
     const g = SD.App.getGame();
     g.select(2); g.state.board.clearCell(2, { force: true });
@@ -168,10 +173,9 @@ async function main() {
     await new Promise(r => setTimeout(r, 30));
     g.undo();
     await new Promise(r => setTimeout(r, 30));
-    const same = JSON.stringify(Array.from(g.state.board.grid)) === JSON.stringify(snap);
-    return { ok: same, info: same ? '撤销准确回到上一步' : '撤销后盘面与上一步不一致' };
+    const same = Array.from(g.state.board.grid).every((v, k) => v === snap[k]);
+    return { ok: same, info: same ? '撤销后回到上一步' : '撤销后与上一步不一致' };
   })()`);
-
   await step('重做可用', `(async function(){
     const g = SD.App.getGame();
     const okRedo = g.redo();
