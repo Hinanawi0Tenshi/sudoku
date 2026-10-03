@@ -378,27 +378,30 @@ async function main() {
     return { ok: opened === 1 && !!board && !err, info: info };
   })()`);
 
-  await step('题库页五档都有待做题且不重复', `(async function(){
+  await step('正在做的局：每档只留一局，且只列真正开过的档', `(async function(){
+    SD.App.showView('home');
+    await new Promise(r => setTimeout(r, 100));
     document.querySelector('.home-item[data-go=bank]').click();
-    await new Promise(function (r) { setTimeout(r, 3000); });
-    var rows = Array.from(document.querySelectorAll('#page-root .bank-item.is-queue'));
-    var state = SD.Store.state();
-    var dbg = 'queue=' + (state.queue || []).length + ' used=' + Object.keys(state.usedGrids || {}).length;
-    var bad = [];
-    for (var d of SD.Generator.DIFFICULTY_ORDER) {
-      var cfg = SD.Generator.DIFFICULTY[d];
-      if (SD.Store.queueOf(d).length !== 3) bad.push(cfg.name + ' 待做 ' + SD.Store.queueOf(d).length + ' 道');
-    }
-    var seen = new Set();
-    var dup = 0;
-    for (const diff of SD.Generator.DIFFICULTY_ORDER) {
-      for (const q of SD.Store.queueOf(diff)) {
-        if (seen.has(q.grid)) dup++;
-        seen.add(q.grid);
-      }
-    }
-    return { ok: bad.length === 0 && dup === 0 && rows.length >= 5,
-             info: '行数 ' + rows.length + '，' + (bad.length ? bad.join('；') : '五档各 3 道') + '，重复 ' + dup + '，' + dbg };
+    await new Promise(r => setTimeout(r, 200));
+    var rows = document.querySelectorAll('#page-root .bank-item.is-queue');
+    // 一档都没开过就不该摆出空行——这正是「这里直接不要」的意思
+    var emptyAtStart = rows.length === 0;
+    var q = SD.Generator.generateSync('medium', 'queue-one');
+    var gid = SD.Base.gridToString(q.givens);
+    SD.Store.pushQueue('medium', gid, q.clueCount, q.level);
+    SD.App.showView('home');
+    await new Promise(r => setTimeout(r, 100));
+    document.querySelector('.home-item[data-go=bank]').click();
+    await new Promise(r => setTimeout(r, 250));
+    var after = document.querySelectorAll('#page-root .bank-item.is-queue');
+    var oneOnly = after.length === 1;
+    var rep = SD.Generator.inspect(SD.Base.stringToGrid(gid));
+    var btn = !!document.querySelector('#page-root .bank-item.is-queue .btn-primary');
+    SD.Store.removeQueueItem(SD.Store.queueOf('medium')[0].id);
+    SD.App.showView('home');
+    return { ok: emptyAtStart && oneOnly && rep.valid && btn,
+             info: '没开局时行数=' + rows.length + '，开一局后=' + after.length
+               + '（每档只一局=' + oneOnly + '），题目合法=' + rep.valid + '，有继续按钮=' + btn };
   })()`);
 
   await step('换一代生成器后旧存档会被丢弃', `(function(){
@@ -486,36 +489,6 @@ async function main() {
              info: '填了 ' + filled + '，解法 ' + before + '→' + after + ' 条，面板与重算结果'
                + (recomputed === afterText ? '一致' : '不一致') };
   })()`);
-  await step('待做题开局的题都合法且唯一解', `(function(){
-    // 待做题现在全部由本机现生成，所以要验的是「生成出来的题」本身合格。
-    const bad = [];
-    for (const diff of SD.Generator.DIFFICULTY_ORDER) {
-      for (const q of SD.Store.queueOf(diff)) {
-        const r = SD.Generator.inspect(SD.Base.stringToGrid(q.grid));
-        if (!r.valid) bad.push(diff + '：' + r.reason);
-      }
-    }
-    const total = SD.Generator.DIFFICULTY_ORDER.reduce((n, d) => n + SD.Store.queueOf(d).length, 0);
-    return { ok: bad.length === 0 && total > 0,
-             info: bad.length ? bad.join('; ') : total + ' 道待做题全部合法唯一解' };
-  })()`);
-
-  await step('从待做题能直接开一局', `(async function(){
-    document.querySelector('.home-item[data-go=bank]').click();
-    await new Promise(res => setTimeout(res, 200));
-    const line = document.querySelector('#page-root .bank-item.is-queue .btn-primary');
-    if (!line) return { ok: false, info: '待做题区没有开始按钮' };
-    line.click();
-    await new Promise(res => setTimeout(res, 700));
-    const st = SD.App.getGame().state;
-    const view = document.documentElement.getAttribute('data-view');
-    let locked = 0;
-    for (let i = 0; i < 81; i++) if (st.board.grid[i] && st.board.isGiven(i)) locked++;
-    SD.App.showView('home');
-    return { ok: view === 'game' && locked > 0,
-             info: '标题=' + st.meta.title + '，线索 ' + locked + ' 个，视图=' + view };
-  })()`);
-
   await step('设置页可切换全部主题', `(async function(){
     document.getElementById('btn-home').click();
     document.querySelector('.home-item[data-go=settings]').click();

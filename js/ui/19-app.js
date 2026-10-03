@@ -386,8 +386,8 @@
 
   /* ---------------- 题库页 ---------------- */
   /** 每档自动攒几道待做题，做完一道补一道 */
-  const QUEUE_KEEP = 3;
-
+  // 每个难度同时只留一局正在做的。玩家可以五档各开一局，但同一档不重复占位。
+  const QUEUE_KEEP = 1;
   /**
    * 补位出题。已经出现在待做队列、玩家自己题库、每日挑战里的题面一律跳过——
    * 用题面字符串做指纹，比按标题去重可靠得多。
@@ -457,22 +457,36 @@
       },
     });
 
+    /** 迷你棋盘缩略图：一眼看出这道题长什么样，比光一行字强 */
+    function thumb(grid) {
+      const box = el('div.mini-board');
+      const g = B.stringToGrid(grid);
+      for (let i = 0; i < B.CELL_COUNT; i++) {
+        let cls = 'mcell';
+        if (B.COL_OF[i] === 2 || B.COL_OF[i] === 5) cls += '.mc';
+        if (B.ROW_OF[i] === 2 || B.ROW_OF[i] === 5) cls += '.mr';
+        box.appendChild(el('div.' + cls, { text: g[i] ? String(g[i]) : '' }));
+      }
+      return box;
+    }
+
     function drawMine() {
       U.clear(mine);
       const saved = SD.Store.userBank();
       if (!saved.length) {
-        mine.appendChild(el('p.lead', { text: '还没有自己存的题。上面识别成功后点「存进我的题库」。' }));
+        mine.appendChild(el('p.lead', { text: '做完的题会自动留在这里，想重做随时点开。' }));
         return;
       }
       for (const p of saved) {
         const clues = p.grid.replace(/\./g, '').length;
         mine.appendChild(
           el('div.bank-item.is-mine', null, [
+            thumb(p.grid),
             el('div.bi-main', null, [
-              el('b.bi-name', { text: p.name }),
-              el('span.bi-band', { text: p.band || '自定义' }),
+              el('b.bi-name', { text: p.band || '自定义' }),
+              el('span.bi-band', { text: clues + ' 个线索' }),
+              p.times > 1 ? el('span.bi-warn', { text: '做过 ' + p.times + ' 遍' }) : null,
             ]),
-            el('div.bi-meta', { text: clues + ' 个线索' }),
             el('div.bi-row', null, [
               el('button.btn.btn-primary', { text: '开始', onclick: () => playUserPuzzle(p) }),
               el('button.btn', {
@@ -487,37 +501,40 @@
     drawMine();
     drawQueue();
 
+    /**
+     * 正在做的局。只列真正开过的那几档——五档各能留一局，
+     * 但没必要把没开过的档也摆出来占地方。新建一局才往这里加一条。
+     */
     function drawQueue() {
       U.clear(queueBox);
       let any = false;
       for (const diff of SD.Generator.DIFFICULTY_ORDER) {
         const cfg = SD.Generator.DIFFICULTY[diff];
         const items = SD.Store.queueOf(diff);
-        if (!items.length) {
-          queueBox.appendChild(el('p.lead', { text: cfg.name + '：暂无' }));
-          continue;
-        }
+        if (!items.length) continue;
         any = true;
+        const item = items[0];
         const line = el('div.bank-item.is-queue', null, [
           el('div.bi-main', null, [
-            el('b.bi-name', { text: cfg.name + '（' + items.length + ' 道）' }),
-            el('span.bi-band', { text: '待做' }),
+            el('b.bi-name', { text: cfg.name }),
+            el('span.bi-band', { text: item.clues + ' 个线索 · 在做' }),
           ]),
-          el('div.bi-meta', { text: '做完一道自动补一道' }),
           el('div.bi-row', null, [
-            el('button.btn.btn-primary', { text: '开始', onclick: () => playQueueItem(items[0]) }),
+            el('button.btn.btn-primary', { text: '继续', onclick: () => playQueueItem(item) }),
+            el('button.btn', {
+              text: '换一题',
+              onclick: () => {
+                SD.Store.removeQueueItem(item.id);
+                refillQueue(diff);
+                drawQueue();
+              },
+            }),
           ]),
         ]);
         queueBox.appendChild(line);
       }
       if (!any) {
-        // 一档都没有时现场补一次。补不上就照实说，别转圈——
-        // generateSync 理论上总能出题，但这里不该拿死循环赌。
-        noteDailyGrid();
-        let added = 0;
-        for (const diff of SD.Generator.DIFFICULTY_ORDER) added += refillQueue(diff);
-        if (added) drawQueue();
-        else queueBox.appendChild(el('p.lead', { text: '暂时没能出题，请稍后再试。' }));
+        queueBox.appendChild(el('p.lead', { text: '还没有正在做的局。上面开一局，或回到首页按难度出题。' }));
       }
     }
   }

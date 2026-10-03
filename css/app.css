@@ -1372,3 +1372,16 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
     color: #d94a4a;
     text-decoration: line-through;
   }
+/* 迷你棋盘缩略图：做过的题一眼看出长什么样 */
+.mini-board {
+  display: grid; grid-template-columns: repeat(9, 1fr);
+  width: 58px; height: 58px; flex: 0 0 auto;
+  border: 1px solid var(--border); border-radius: 3px; overflow: hidden;
+  background: var(--bg-soft);
+}
+.mini-board .mcell {
+  display: grid; place-items: center;
+  font-size: 8px; line-height: 1; color: var(--text-dim);
+}
+.mini-board .mc, .mini-board .mr { background: var(--surface-2); }
+.bank-item.is-mine { align-items: center; }
