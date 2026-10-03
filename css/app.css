@@ -926,6 +926,13 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
   background: var(--surface);
 }
 .tech-card.is-open { border-color: var(--accent); box-shadow: var(--shadow-sm); }
+/* 当前局面可用：加左侧色条和「可用」标记，让它一眼能从清单里挑出来 */
+.tech-card.is-usable { border-color: var(--accent); }
+.tech-card.is-usable .tech-head { background: var(--accent-soft); }
+.tech-flag {
+  font-size: 10px; font-weight: 700; color: var(--accent);
+  border: 1px solid var(--accent); border-radius: 999px; padding: 1px 6px;
+}
 .tech-head {
   width: 100%; display: flex; align-items: center; gap: 9px;
   padding: 10px 12px; background: none; border: none;

@@ -11,8 +11,12 @@
 - 完整手册：`.workbuddy/skills/sudoku-deploy/SKILL.md`
 
 ## 红线：这个项目目录会整个上传到公网
-`.workbuddy/memory/`、`.workbuddy/skills/`、`tests/`、`README.md`、`serve.py` 实测公网可访问，
+`.workbuddy/memory/`、`.workbuddy/skills/`、`tests/`、`docs/`、`README.md`、`serve.py` 实测公网可访问，
 只有 `.git/` 是 403。**不要把密钥、token、私有素材、未公开内容写进本目录**，包括记忆文件。
+
+**发布是「覆盖式增量」，不是整体替换**：本地删掉的文件线上依然存在（实测 `08b-bank-big.js`
+删了仍返回完整 432KB）。发布也没有排除参数。两者合起来 —— 任何被写进过本目录的东西，
+只要发过一次版，就默认**公开且难以撤回**。真要撤：内容改空再发一次，或应用下架重建（链接会变）。
 
 ## 不能破坏的技术约束
 - `js/ui/18-ocr.js` 的 `VENDOR = 'js/vendor/'` 是相对路径 → 必须部署在根路径，挪子目录会 404。

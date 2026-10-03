@@ -133,14 +133,11 @@
   /** 技巧教学原先挤在侧栏标签里，现在点按钮弹出来，不占棋盘的横向空间 */
   function openLearnModal() {
     const body = el('div.learn-modal');
-    const available = el('div.tech-available');
     const library = el('div.tech-library');
-    body.appendChild(el('div.learn-intro', { text: '当前局面可用的技巧会高亮显示。点开任意技巧，看它的原理、步骤与常见误区。' }));
-    body.appendChild(available);
+    body.appendChild(el('div.learn-intro', { text: '当前局面可用的技巧排在最前。点任意一条，就在那一条下面展开演示盘面和讲解。' }));
     body.appendChild(library);
     const draw = () => {
-      SD.Panels.renderAvailable(available, game.state.board.grid);
-      SD.Panels.renderLibrary(library, openTech);
+      SD.Panels.renderTechIndex(library, game.state.board.grid, openTech);
     };
     library.addEventListener('techpick', (e) => {
       openTech = e.detail;

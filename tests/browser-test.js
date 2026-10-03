@@ -833,22 +833,30 @@ async function main() {
     return { ok: right && cleared && first.textContent === label,
              info: refs.length + ' 处引用，' + first.textContent + ' → 第 ' + cell + ' 格，点亮=' + right + '，移出后清空=' + cleared };
   })()`);
-  await step('技巧教学弹窗渲染出全部技巧', `(async function(){
+  await step('技巧教学点哪条就在哪条下面展开', `(async function(){
     SD.App.showView('game');
     await new Promise(r => setTimeout(r, 80));
     document.getElementById('btn-learn').click();
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 250));
     const cards = document.querySelectorAll('.modal .tech-card');
-    const chips = document.querySelectorAll('.modal .tech-chip');
-    // 弹窗里点开一条，卡片要能原地展开成完整讲解
-    const head = document.querySelector('.modal .tech-head');
-    if (head) head.click();
-    await new Promise(r => setTimeout(r, 150));
-    const opened = document.querySelectorAll('.modal .tech-card.is-open').length;
+    const usable = document.querySelectorAll('.modal .tech-card.is-usable').length;
+    const heads = document.querySelectorAll('.modal .tech-head');
+    if (heads.length < 5) return { ok: false, info: '技巧条目太少: ' + heads.length };
+    // 点第 5 条，正文必须紧跟在它下面，而不是跑到页面最底下
+    heads[4].click();
+    await new Promise(r => setTimeout(r, 250));
+    const openCard = document.querySelector('.modal .tech-card.is-open');
+    const body = openCard ? openCard.querySelector('.tech-body') : null;
+    const inline = !!(body && body.parentElement === openCard);
+    // 重渲染后所有节点都是新的，只能比索引，不能比引用
+    const isFifth = Array.prototype.indexOf.call(
+      document.querySelectorAll('.modal .tech-card'), openCard) === 4;
+    const demo = openCard ? openCard.querySelector('.demo-board') : null;
     const close = document.querySelector('.modal-foot .btn');
     if (close) close.click();
-    return { ok: cards.length >= 12 && opened === 1,
-             info: cards.length + ' 张技巧卡片，本局面可用 ' + chips.length + ' 种，展开 ' + opened + ' 条' };
+    return { ok: cards.length >= 12 && inline && isFifth,
+             info: cards.length + ' 张卡片，可用 ' + usable + ' 种；展开的是第 5 条=' + isFifth
+               + '，正文就地=' + inline + '，带演示盘面=' + !!demo };
   })()`);
   await step('题库页挂着图片识别与我的题库', `(async function(){
     SD.App.showView('home');
