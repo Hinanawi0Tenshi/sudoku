@@ -19,7 +19,7 @@ async function main() {
   const browser = spawn(EDGE, [
     '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
     '--remote-debugging-port=' + PORT, '--user-data-dir=' + profile,
-    '--window-size=1400,1000', URL,
+    '--window-size=1400,1000', 'about:blank',
   ], { stdio: 'ignore' });
 
   let target = null;
@@ -75,7 +75,30 @@ async function main() {
 
   await send('Runtime.enable');
   await send('Page.enable');
-  await sleep(3000);
+  // 启用了空白页，等 CDP 接稳再导航。原先靠启动参数直接开目标页，
+  // 页面在监听挂上之前就开始加载，前几个脚本的异常抓不到，
+  // 还会因为时序问题看到半加载状态，误报成「一堆模块缺失」。
+  await send('Page.navigate', { url: URL });
+  // 轮询到应用真的就绪，而不是死等固定秒数：页面里 tesseract.min.js 有 20MB，
+  // 会把后面几个 UI 脚本整体拖后，睡 3 秒就开跑会看到半加载状态。
+  const NEED = ['App', 'Data', 'OCR', 'UI', 'Store'];
+  let ready = false;
+  for (let i = 0; i < 200 && !ready; i++) {
+    await sleep(250);
+    try {
+      ready = await evaluate('typeof SD !== "undefined" && ' + NEED.map((k) => '!!SD.' + k).join(' && '));
+    } catch (e) { /* 页面还没到能求值的程度 */ }
+  }
+  if (!ready) {
+    // 报清楚缺哪个，而不是只说「没就绪」——否则又得重头猜一遍
+    let missing = '页面完全没起来';
+    try {
+      missing = await evaluate('typeof SD === "undefined" ? "SD 未定义" : '
+        + '["' + NEED.join('","') + '"].filter(function (k) { return !SD[k]; }).join(",") || "全部就绪"');
+    } catch (e) { /* 求值不了就算了 */ }
+    throw new Error('应用在 50 秒内没有就绪，缺：' + missing);
+  }
+  await sleep(300);
 
   const results = [];
   const check = (name, ok, detail) => {
@@ -94,7 +117,9 @@ async function main() {
   await step('棋盘渲染出 81 格', `(function(){
     const cells = document.querySelectorAll('#board .cell');
     const g = window.SD && SD.App && SD.App.getGame();
-    return { ok: cells.length === 81, info: cells.length + ' 格 / 题面 ' + (g ? Array.from(g.state.givens).filter(Boolean).length : '?') + ' 线索' };
+    // 全新环境第一局还在生成，givens 可能还没就绪，不能直接 Array.from
+    const given = g && g.state.givens ? Array.from(g.state.givens).filter(Boolean).length : 0;
+    return { ok: cells.length === 81, info: cells.length + ' 格 / 题面 ' + given + ' 线索' };
   })()`);
 
   await step('核心命名空间齐备', `(function(){
@@ -174,18 +199,22 @@ async function main() {
   })()`);
 
   await step('一键提示能给出推理并执行', `(async function(){
+    // 自备局面：原先沿用上一条用例留下的盘面，那边若刚重开过局，
+    // 计数基线就不是这道题的了
+    var fresh = SD.Generator.generateSync('easy', 'onekey-hint');
+    SD.App.startWith(fresh.givens, { difficultyName: '测试' }, fresh.solution);
+    await new Promise(res => setTimeout(res, 150));
     const g = SD.App.getGame();
     const before = g.state.board.grid.filter(Boolean).length;
-    const r = SD.Hints.next(g.state.board.grid, { maxLevel: 5 });
-    if (!r) return { ok: false, info: '没有可用提示' };
     document.getElementById('btn-hint-apply').click();
-    await new Promise(res => setTimeout(res, 150));
+    await new Promise(res => setTimeout(res, 200));
     const after = g.state.board.grid.filter(Boolean).length;
     const card = document.querySelector('#hint-output .hint-card');
     const liCount = document.querySelectorAll('#hint-output .hint-section ol li').length;
     const concl = document.querySelector('#hint-output .hint-conclusion');
-    return { ok: !!card && liCount > 0 && !!concl && after >= before,
-             info: '卡片=' + !!card + ' 推导行=' + liCount + ' 填入 ' + before + '→' + after };
+    SD.App.showView('home');
+    return { ok: !!card && liCount > 0 && !!concl && after > before,
+             info: '卡片=' + !!card + ' 推导行=' + liCount + ' 结论=' + !!concl + ' 填入 ' + before + '→' + after };
   })()`);
 
   await step('自动求解能填满棋盘', `(async function(){
@@ -422,6 +451,39 @@ async function main() {
              info: '记录 ' + ids.length + ' 种技巧，其中余数法 ' + singles + ' 次、其他 ' + others.length + ' 种：' + others.join(',') };
   })()`);
 
+
+  await step('提示面板跟着盘面实时刷新', `(async function(){
+    var fresh = SD.Generator.generateSync('master', 'hint-live');
+    SD.App.startWith(fresh.givens, { difficultyName: '测试' }, fresh.solution);
+    await new Promise(function (r) { setTimeout(r, 150); });
+    var g = SD.App.getGame();
+    document.getElementById('btn-hint').click();
+    await new Promise(function (r) { setTimeout(r, 250); });
+    var out = document.querySelector('#hint-output');
+    var before = out.querySelectorAll('.hint-chip').length;
+    if (!before) return { ok: false, info: '面板里没有解法，测不了' };
+    var beforeText = out.textContent;
+    var empty = -1;
+    for (var i = 0; i < 81; i++) if (!g.state.board.grid[i] && !g.state.board.locked[i]) { empty = i; break; }
+    if (empty < 0) return { ok: true, info: '盘面已满' };
+    // 必须走真实 UI：直接调 inputDigit 不会触发 render，测不到面板刷新
+    document.querySelector('#board .cell[data-index="' + empty + '"]').click();
+    document.querySelector('.np-digit[data-digit="' + fresh.solution[empty] + '"]').click();
+    await new Promise(function (r) { setTimeout(r, 400); });
+    var afterText = out.textContent;
+    var after = out.querySelectorAll('.hint-chip').length;
+    var filled = g.state.board.grid[empty];
+    // 关键不是「文本变了」——填一格未必改变最优解法的措辞。
+    // 要验的是面板与盘面同步：强制重算一次，两者必须一致。
+    var lv = document.getElementById('hint-level');
+    lv.dispatchEvent(new Event('change'));
+    await new Promise(function (r) { setTimeout(r, 300); });
+    var recomputed = out.textContent;
+    SD.App.showView('home');
+    return { ok: !!filled && recomputed === afterText,
+             info: '填了 ' + filled + '，解法 ' + before + '→' + after + ' 条，面板与重算结果'
+               + (recomputed === afterText ? '一致' : '不一致') };
+  })()`);
   await step('批量题库五档数量与题面去重', `(function(){
     var want = { easy: 1000, medium: 1000, hard: 1000, expert: 1000, master: 1000 };
     var bad = [];

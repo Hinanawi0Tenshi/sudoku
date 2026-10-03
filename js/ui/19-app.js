@@ -56,6 +56,10 @@
     $('#btn-undo').disabled = !st.history.length;
     $('#btn-redo').disabled = !st.future.length;
     $('#btn-notes').classList.toggle('is-on', st.noteMode);
+    // 面板开着时跟着盘面重算解说。原先只在走提示按钮时才刷新，
+    // 于是玩家自己填了一个数，讲解还停在上一步、结论指向已经填满的格子。
+    // 关着面板时不重算，免得白白遍历一遍所有技巧。
+    if (!$('#hint-area').hidden) renderHintPanel();
   }
 
   function renderStatus() {
