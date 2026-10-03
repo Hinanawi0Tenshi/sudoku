@@ -264,7 +264,7 @@
     id: 'naked-pair',
     name: '显性数对',
     alias: ['显性对子', 'Naked Pair', '明确数对'],
-    level: 2,
+    level: 3,
     category: '排除',
     order: 22,
     tagline: '同区域两格候选完全相同且只有两个 → 该区域其余格删掉这两个数。',
@@ -314,7 +314,7 @@
     id: 'hidden-pair',
     name: '隐性数对',
     alias: ['隐性对子', 'Hidden Pair'],
-    level: 2,
+    level: 3,
     category: '排除',
     order: 23,
     tagline: '两个数字在一个区域里只能挤进同两格 → 这两格删掉其它候选。',
@@ -460,7 +460,7 @@
     id: 'naked-quad',
     name: '显性四数组',
     alias: ['Naked Quad'],
-    level: 4,
+    level: 5,
     category: '高级',
     order: 36,
     tagline: '同区域四格候选完全相同且只有四个 → 其余格删掉这四个数。',
@@ -476,7 +476,7 @@
     id: 'hidden-quad',
     name: '隐性四数组',
     alias: ['Hidden Quad'],
-    level: 4,
+    level: 5,
     category: '高级',
     order: 37,
     tagline: '同区域四个数字的候选合起来只有四格 → 这四格删掉别的候选。',
@@ -492,7 +492,7 @@
     id: 'naked-triple',
     name: '显性三数组',
     alias: ['Naked Triple'],
-    level: 3,
+    level: 4,
     category: '进阶',
     order: 30,
     tagline: '同区域三格候选完全相同且只有三个 → 其余格删掉这三个数。',
@@ -508,7 +508,7 @@
     id: 'hidden-triple',
     name: '隐性三数组',
     alias: ['Hidden Triple'],
-    level: 3,
+    level: 4,
     category: '进阶',
     order: 31,
     tagline: '三个数字在一个区域里只能挤进同三格 → 这三格删掉其它候选。',
@@ -619,7 +619,7 @@
     id: 'x-wing',
     name: 'X-Wing',
     alias: ['双阶列', 'X 翼'],
-    level: 3,
+    level: 4,
     category: '进阶',
     order: 32,
     tagline: '某数字在两行都只落在同样两列上 → 覆盖两列其余行的候选删掉。',
@@ -636,7 +636,7 @@
     id: 'xy-wing',
     name: 'XY-Wing',
     alias: ['XY 翼'],
-    level: 3,
+    level: 4,
     category: '进阶',
     order: 33,
     tagline: '一个 {x,y} 枢纽配两个 {x,z} / {y,z} 翼 → 同时看得到两翼的格子里删掉 z。',
@@ -710,7 +710,7 @@
     id: 'jellyfish',
     name: '四链列 / 四链行',
     alias: ['Jellyfish', '四链鱼', '四阶列', '水母'],
-    level: 4,
+    level: 5,
     category: '高级',
     order: 39,
     tagline: 'X-Wing 的四行四列版本，原理完全一致。',
@@ -729,7 +729,7 @@
     id: 'swordfish',
     name: '三链列 / 三链行',
     alias: ['Swordfish', '三链鱼', '三阶列'],
-    level: 4,
+    level: 5,
     category: '高级',
     order: 40,
     tagline: 'X-Wing 的三行三列版本，原理完全一致。',
@@ -1025,7 +1025,7 @@
     id: 'w-wing',
     name: 'W 翼',
     alias: ['W-Wing'],
-    level: 4,
+    level: 5,
     category: '高级',
     order: 43,
     tagline: '两格共用一个数，第三格看得到这两格 → 共用的那个数出不来。',
@@ -1454,7 +1454,7 @@
     id: 'degenerate-fish',
     name: '退化鱼',
     alias: ['Degenerate Fish', 'Sashimi Fish', '缺角鱼'],
-    level: 4,
+    level: 5,
     category: '高级',
     order: 44,
     tagline: '鱼形家族的放宽版：某条基础线只剩一个候选，鳍位已被别的数字占了。',
@@ -1542,7 +1542,7 @@
     id: 'empty-rectangle',
     name: '空矩形',
     alias: ['Empty Rectangle', 'ER', 'Rectangle Elimination'],
-    level: 5,
+    level: 4,
     category: '专家',
     order: 45,
     tagline: '宫里的数字候选挤在两行两列内，借一条强链把宫外某格也排除掉。',
@@ -1646,7 +1646,7 @@
     id: 'finny-fish',
     name: '带鳍鱼',
     alias: ['Finny Fish', 'Finned X-Wing', 'Finned Swordfish', '带鳍二阶鱼', '带鳍三阶鱼'],
-    level: 4,
+    level: 5,
     category: '高级',
     order: 43,
     tagline: '鱼形之外多出一个「鳍」格，靠它把删除范围传出去。',
@@ -1668,7 +1668,7 @@
     name: '唯一矩形（类型 1）',
     alias: ['UR1', 'Unique Rectangle', '唯一矩形'],
     needsUnique: true,   // 靠致命模式论证，题面多解时会给出错误提示
-    level: 4,
+    level: 5,
     category: '高级',
     order: 41,
     tagline: '2×2 矩形恰好落在两个宫里，三格同为一对候选 → 第四格删掉其中一个数。',
@@ -1774,6 +1774,29 @@
     return null;
   }
 
+  /**
+   * 当前局面有多少条「不同来源」的可走一步。
+   *
+   * 只数一步：同一技巧可能一次命中多处，但那属于同一个决策，
+   * 人类的「下一步往哪走」感受也只算一个。
+   * 结果为 1 时就是瓶颈——整条解法流程里只剩唯一一步可走，
+   * 这正是国际惯例里衡量难度的关键（Conceptis 称之为 bottleneck）：
+   * 哪怕技巧都很简单，瓶颈一多照样费时间。
+   */
+  function branchCount(state, maxLevel) {
+    let acts = 0;
+    for (const t of LIST) {
+      if (t.level > (maxLevel || 5) || !t.find) continue;
+      if (t.needsUnique) continue;
+      const s = t.find(state);
+      if (!s) continue;
+      const n = (s.placements ? s.placements.length : 0) + (s.eliminations ? s.eliminations.length : 0);
+      acts += n;
+      if (acts > 1) return acts;
+    }
+    return acts;
+  }
+
   function findStep(grid, opts) {
     return findStepFrom(makeState(grid), opts);
   }
@@ -1849,6 +1872,7 @@
     let level = 0;
     let firstAdvanced = null;
     let contradiction = false;
+    let bottlenecks = 0;
 
     while (steps < cap) {
       if (SD.Validation.isComplete(g)) break;
@@ -1878,6 +1902,9 @@
       if (step.level > level) level = step.level;
       if (step.level >= 3 && !firstAdvanced) firstAdvanced = step.id;
       used[step.id] = (used[step.id] || 0) + 1;
+      // 走这一步之前先数清有几条路可走：只剩一条就是瓶颈。
+      // 成本可接受——find 都很快，而这是难度的另一半真相。
+      if (branchCount({ grid: g, cand: cand }, maxLevel) <= 1) bottlenecks++;
       commit(g, cand, step);
     }
 
@@ -1887,6 +1914,7 @@
       steps: steps,
       used: used,
       level: level,
+      bottlenecks: bottlenecks,
       firstAdvanced: firstAdvanced,
       finalGrid: g,
     };

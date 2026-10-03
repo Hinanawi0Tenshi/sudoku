@@ -440,13 +440,13 @@
     root.appendChild(el('h3.sec-title', { text: '从图片添加' }));
     const ocrBox = el('div.ocr-box');
     root.appendChild(ocrBox);
-    root.appendChild(el('h3.sec-title', { text: '待做题' }));
+    root.appendChild(el('h3.sec-title', { text: '正在做' }));
     root.appendChild(el('p.lead', { text: '每档留 ' + QUEUE_KEEP + ' 个空位，点「开始」才现出一道题；做完一个自动补上一个。' }));
     const queueBox = el('div.bank-list');
     root.appendChild(queueBox);
 
-    root.appendChild(el('h3.sec-title', { text: '我的题库' }));
-    root.appendChild(el('p.lead', { text: '做过的题会自动留在这里，下次可以直接重做。' }));
+    root.appendChild(el('h3.sec-title', { text: '做过的题' }));
+    root.appendChild(el('p.lead', { text: '通关的题目会自动留在这里，随时可以重做；不想要了可以删。' }));
     const mine = el('div.bank-list');
     root.appendChild(mine);
 
@@ -747,6 +747,8 @@
       difficulty: st.meta.difficulty || 'custom',
       techniques: st.techniques,
       dailyKey: st.meta.dailyKey,
+      grid: B.gridToString(st.givens || st.board.givens),
+      difficultyName: st.meta.difficultyName,
     });
     scheduleSave();
     // 待做队列：做完一道立刻补一道，玩家手上永远有 QUEUE_KEEP 道可打。

@@ -153,7 +153,8 @@
     const list = userBank().slice();
     const id = 'u' + Date.now().toString(36);
     list.unshift({ id: id, name: name, grid: grid, band: band, addedAt: Date.now() });
-    state.userBank = list.slice(0, 60);
+    // 已做完的题不设上限：玩家想留多少留多少，真嫌多了自己删。
+    state.userBank = list;
     save();
     return id;
   }
@@ -243,6 +244,30 @@
     if (added) save();
     return added;
   }
+  /** 把做过的题存进我的题库。已存在则只更新成绩，不重复入库。 */
+  function archivePuzzle(grid, band, timeMs) {
+    const list = userBank().slice();
+    const at = list.findIndex((p) => p.grid === grid);
+    if (at >= 0) {
+      const old = list[at];
+      old.times = (old.times || 1) + 1;
+      if (timeMs && (!old.bestTime || timeMs < old.bestTime)) old.bestTime = timeMs;
+      list.splice(at, 1);
+      list.unshift(old);
+      state.userBank = list;
+      save();
+      return old.id;
+    }
+    const id = 'u' + Date.now().toString(36);
+    list.unshift({
+      id: id, name: '已完成的题目', grid: grid, band: band,
+      bestTime: timeMs || 0, times: 1, addedAt: Date.now(),
+    });
+    state.userBank = list;
+    save();
+    return id;
+  }
+
   function removeUserPuzzle(id) {
     state.userBank = userBank().filter((p) => p.id !== id);
     save();
@@ -252,6 +277,11 @@
   function recordGame(result) {
     const s = state.stats;
     s.games++;
+    // 做过的题自动入库：题面指纹去重，重做同一道不会灌进好几份。
+    // 每日挑战不入库——按日期生成，存下来只越积越多且没有重玩价值。
+    if (result.won && result.grid && !result.dailyKey) {
+      archivePuzzle(result.grid, result.difficultyName || '自定义', result.timeMs);
+    }
     if (result.won) {
       s.wins++;
       s.playTime += result.timeMs || 0;
@@ -358,6 +388,7 @@
     recordDailyProgress: recordDailyProgress,
     userBank: userBank,
     addUserPuzzle: addUserPuzzle,
+archivePuzzle: archivePuzzle,
     removeUserPuzzle: removeUserPuzzle,
     queue: queue,
     queueOf: queueOf,

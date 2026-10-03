@@ -27,7 +27,20 @@
     'forcing-chain': 40,
   };
 
-  const STAR_BREAK = [120, 260, 450, 780];
+  /**
+   * 星级断点。用「技巧天花板 + 路径形状」两项一起算分。
+   *
+   * 只看最高技巧是天花板指标，答不了「同样只用区块摒除的两道题，
+   * 一道到处顺手、一道处处瓶颈」的差别。后者体感上要慢得多，
+   * 所以瓶颈占比必须计入分数——这是国际惯例（Conceptis 的 bottleneck）
+   * 里难度的另一半真相。
+   */
+  const STAR_BREAK = [130, 280, 470, 800];
+
+  /** 瓶颈占比：0 表示每一步都有多个选择，1 表示全程只能照着唯一一条路走 */
+  function chokeRatio(sim) {
+    return sim.steps ? sim.bottlenecks / sim.steps : 0;
+  }
 
   function rate(grid, opts) {
     const maxLevel = (opts && opts.maxLevel) || 5;
@@ -48,7 +61,10 @@
 
     // 推不动就意味着必须靠试错，星级直接拉满
     const level = sim.level;
-    const score = level * 120 + weight + (sim.solved ? 0 : 900);
+    const choke = chokeRatio(sim);
+    // 瓶颈占八成的题星级额外上浮：同样的技巧天花板，它明显更难熬
+    const shape = Math.round(choke * 120);
+    const score = level * 120 + weight + shape + (sim.solved ? 0 : 900);
     let star = 1;
     for (let i = 0; i < STAR_BREAK.length; i++) if (score > STAR_BREAK[i]) star = i + 2;
     if (star > 5) star = 5;
@@ -62,6 +78,8 @@
       score: score,
       steps: sim.steps,
       total: total,
+      bottlenecks: sim.bottlenecks,
+      choke: choke,
       used: sim.used,
       breakdown: breakdown,
       needsGuess: !sim.solved,
