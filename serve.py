@@ -30,8 +30,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
-class Server(socketserver.TCPServer):
+class Server(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
+    # 单线程的 TCPServer 一次只 accept 一条连接，而浏览器并发开六条，
+    # 多出来的直接被拒（浏览器报 net::ERR_CONNECTION_REFUSED）。
+    # 页面一次要加载二十来个脚本，必有随机几个静默加载失败，
+    # 表现为「模块随机缺失」「服务像是不时死掉」，极难定位。
+    daemon_threads = True
 
 
 def main():

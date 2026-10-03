@@ -20,6 +20,7 @@
     extracted: null,
     digits: new Array(81).fill(0),
     confidences: new Array(81).fill(-1),
+    conflicts: new Array(81).fill(0),
     worker: null,
     busy: false,
   };
@@ -406,7 +407,13 @@
 
       renderResult();
       const low = state.confidences.filter((c) => c >= 0 && c < LOW_CONF).length;
-      setStatus('识别完成：' + hits + ' 格有数字' + (low ? '，其中 ' + low + ' 格置信度偏低（标黄），建议逐格确认' : '，置信度良好'), low ? 'warn' : 'ok');
+      const clash = checkConflicts();
+      renderResult();
+      // 冲突格优先报：置信度低的格子顶多是「不确定」，冲突格是「几乎肯定错」
+      setStatus('识别完成：' + hits + ' 格有数字'
+        + (clash ? '，其中 ' + clash + ' 格与同行/同列/同宫重复（标红），多半认错了，必须先改' : '')
+        + (low && !clash ? '，其中 ' + low + ' 格置信度偏低（标黄），建议逐格确认' : (low ? '' : '，置信度良好')),
+        clash || low ? 'warn' : 'ok');
     } catch (e) {
       setStatus('识别失败：' + e.message, 'err');
       log('错误：' + e.message);
@@ -414,6 +421,23 @@
       state.busy = false;
       if (ui && ui.btnRecognize) ui.btnRecognize.disabled = false;
     }
+  }
+
+  /**
+   * 用数独约束交叉校验识别结果。
+   *
+   * 光看 OCR 置信度不够：8 和 3 字形接近，认错时置信度照样能到 79，
+   * 稳稳地越过阈值，于是错数字就静默进了题面——比明显的坏图更危险，
+   * 因为它看起来完全正常。但错数字几乎必然和同行/同列/同宫的某个数字撞上，
+   * 约束查得到，而置信度查不到。所以判据用约束，不用阈值。
+   */
+  function checkConflicts() {
+    const map = SD.Validation.findConflicts(state.digits);
+    for (let i = 0; i < 81; i++) {
+      const peers = map.get(i);
+      state.conflicts[i] = peers && peers.length ? peers : null;
+    }
+    return state.conflicts.filter(Boolean).length;
   }
 
   /* ---------------- 结果复核网格 ---------------- */
@@ -424,10 +448,14 @@
     for (let i = 0; i < 81; i++) {
       const d = state.digits[i];
       const conf = state.confidences[i];
-      const cls = 'ocr-cell' + (d ? ' has' : '') + (d && conf >= 0 && conf < LOW_CONF ? ' low' : '');
+      const cls = 'ocr-cell' + (d ? ' has' : '')
+        + (d && conf >= 0 && conf < LOW_CONF ? ' low' : '')
+        + (state.conflicts[i] ? ' clash' : '');
       const cell = el('div.' + cls.split(' ').join('.'), {
         text: d ? String(d) : '',
-        title: conf >= 0 ? '置信度 ' + Math.round(conf) : '未识别到数字，点击可手动填写',
+        title: state.conflicts[i]
+          ? '与 R' + state.conflicts[i].map((j) => (B.ROW_OF[j] + 1) + 'C' + (B.COL_OF[j] + 1)).join('、R') + ' 重复，多半是认错了'
+          : (conf >= 0 ? '置信度 ' + Math.round(conf) : '未识别到数字，点击可手动填写'),
         onclick: () => editCell(i),
       });
       cell._index = i;
@@ -462,6 +490,8 @@
           onClick: () => {
             state.digits[i] = grid[i];
             state.confidences[i] = 100; // 人工确认过的直接标为可信
+            // 改完重算冲突：原先红着的格子可能因为这一改而不成立了
+            checkConflicts();
             renderResult();
           },
         },
@@ -537,6 +567,19 @@
     }
     setStatus('正在体检：检查重复数字、解的存在性与唯一性…');
     setTimeout(() => {
+      // 先拦冲突格。inspect 也会发现重复数字，但它报的是整体结论，
+      // 玩家不知道该去改哪一格；这里直接把格子号点出来。
+      const clash = checkConflicts();
+      if (clash) {
+        const where = [];
+        for (let i = 0; i < 81; i++) {
+          if (state.conflicts[i]) where.push('R' + (B.ROW_OF[i] + 1) + 'C' + (B.COL_OF[i] + 1));
+        }
+        setStatus('这 ' + clash + ' 格互相重复，多半是认错了：' + where.join('、') + '。请先改掉再导入。', 'err');
+        toast('有 ' + clash + ' 格重复数字，请先修改', 'err');
+        renderResult();
+        return;
+      }
       const report = SD.Generator.inspect(g);
       if (!report.valid) {
         setStatus('体检未通过：' + report.reason + '。请回到上一步修改标黄的格子。', 'err');

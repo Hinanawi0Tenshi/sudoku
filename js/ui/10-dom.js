@@ -2,6 +2,12 @@
 (function (global) {
   'use strict';
 
+  // 和 01-core 一样先把命名空间建出来，不依赖它先跑完。
+  // 原先这里没有这句，SD.UI 靠的是 01-core 那个顶层 const SD 的词法绑定——
+  // 一旦本文件先于 01-core 执行，末尾那行就会在暂时性死区里抛 ReferenceError，
+  // 于是 SD.UI 从没被赋值，后面所有 UI 模块连锁失败（表现为「首页能开但棋盘空白」）。
+  const SD = (global.SD = global.SD || {});
+
   const $ = (sel, root) => (root || document).querySelector(sel);
   const $$ = (sel, root) => Array.prototype.slice.call((root || document).querySelectorAll(sel));
 

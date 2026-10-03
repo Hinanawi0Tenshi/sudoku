@@ -97,7 +97,7 @@ const SCORE = `(async function () {
 })()`;
 
 (async () => {
-  const b = spawn(EDGE, ['--headless=new','--disable-gpu','--no-first-run','--remote-debugging-port=' + PORT,'--user-data-dir=' + profile,'--window-size=1200,900','http://127.0.0.1:8731/index.html'], { stdio: 'ignore' });
+  const b = spawn(EDGE, ['--headless=new','--disable-gpu','--no-first-run','--remote-debugging-port=' + PORT,'--user-data-dir=' + profile,'--window-size=1200,900','about:blank'], { stdio: 'ignore' });
   let target = null;
   for (let i = 0; i < 60 && !target; i++) { await sleep(400); try { const l = await (await fetch('http://127.0.0.1:' + PORT + '/json/list')).json(); target = l.find((t) => t.type === 'page' && t.webSocketDebuggerUrl); } catch (e) {} }
   const ws = new WebSocket(target.webSocketDebuggerUrl);
@@ -113,12 +113,18 @@ const SCORE = `(async function () {
     return res.result ? res.result.value : null;
   };
   await send('Runtime.enable');
+  await send('Page.enable');
+  // 接上 CDP 再导航。靠启动参数直接开目标页的话，页面在监听挂上之前
+  // 就开始加载，tesseract 那 20MB 常常还没到位就被判定为「未就绪」。
+  await send('Page.navigate', { url: 'http://127.0.0.1:8731/index.html' });
   // 浏览器把页面标签开出来，脚本未必跑完。必须等应用真正就绪，
   // 否则第一个场景会撞上 SD.Generator 还不存在的时刻。
   let ready = false;
-  for (let i = 0; i < 80 && !ready; i++) {
+  for (let i = 0; i < 200 && !ready; i++) {
     await sleep(300);
-    ready = await ev('String(!!(window.SD && SD.Generator && SD.OCR && document.querySelector(".cell"))) === "true"');
+    try {
+      ready = await ev('String(!!(window.SD && SD.Generator && SD.OCR && document.querySelector(".cell"))) === "true"');
+    } catch (e) { /* 页面还没到能求值的程度 */ }
   }
   if (!ready) { console.log('  ✗ 页面未就绪，放弃'); ws.close(); b.kill(); process.exit(2); }
   console.log('\n============ 图片识别：两种真实场景 ============');

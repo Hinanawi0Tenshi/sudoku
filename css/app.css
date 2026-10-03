@@ -1058,6 +1058,16 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
 }
 .ocr-cell.has { background: var(--accent-soft); color: var(--accent); }
 .ocr-cell.low { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); }
+/* 冲突格比低置信更严重：低置信是「不确定」，冲突是「几乎肯定错」。
+   两者同时命中时红色压过黄色，否则会被当成只是「不太确定」。 */
+.ocr-cell.clash {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 20%, transparent);
+  color: var(--danger);
+  font-weight: 700;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 45%, transparent);
+}
+.ocr-cell.low.clash { background: color-mix(in srgb, var(--danger) 28%, transparent); }
 .ocr-cell:hover { border-color: var(--accent); }
 .ocr-status { font-size: 12.5px; color: var(--text-dim); margin-top: 8px; }
 .ocr-log { font-family: var(--mono); font-size: 11.5px; color: var(--text-faint); max-height: 110px; overflow: auto; margin-top: 8px; }
