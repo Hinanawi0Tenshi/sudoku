@@ -888,9 +888,45 @@ async function main() {
     if (r && r.data) fs.writeFileSync(path.join(__dirname, 'shot-app.png'), Buffer.from(r.data, 'base64'));
   }).catch(() => {});
 
+  await step('手动填题能录入并进入棋盘', `(async function(){
+    SD.App.showView('home');
+    await new Promise(r => setTimeout(r, 80));
+    document.querySelector('.home-item[data-go=bank]').click();
+    await new Promise(r => setTimeout(r, 300));
+    const btn = Array.prototype.find.call(
+      document.querySelectorAll('#page-root button'), (b) => b.textContent === '手动填题');
+    if (!btn) return { ok: false, info: '题库页没有「手动填题」按钮' };
+    btn.click();
+    await new Promise(r => setTimeout(r, 250));
+    const cells = document.querySelectorAll('.modal .ocr-preview .ocr-cell');
+    const keys = document.querySelectorAll('.modal .manual-key');
+    if (cells.length !== 81) return { ok: false, info: '棋盘格数不对: ' + cells.length };
+    // 点第一格，再点数字 5
+    cells[0].click();
+    await new Promise(r => setTimeout(r, 60));
+    const five = Array.prototype.find.call(keys, (k) => k.textContent === '5');
+    if (!five) return { ok: false, info: '数字键盘里没有 5' };
+    five.click();
+    await new Promise(r => setTimeout(r, 60));
+    const typed = cells[0].textContent;
+    // 确认填入
+    const ok = Array.prototype.find.call(
+      document.querySelectorAll('.modal-foot button'), (b) => b.textContent === '填入棋盘');
+    if (!ok) return { ok: false, info: '没有「填入棋盘」按钮' };
+    ok.click();
+    await new Promise(r => setTimeout(r, 250));
+    const d0 = SD.OCR.state.digits[0];
+    const shown = document.querySelectorAll('#page-root .ocr-preview .ocr-cell.has').length;
+    SD.App.showView('home');
+    return { ok: typed === '5' && d0 === 5 && shown >= 1,
+             info: '格数=' + cells.length + '，键盘键=' + keys.length
+               + '，敲入显示=' + typed + '，写入 state=' + d0 + '，结果区标出 ' + shown + ' 格' };
+  })()`);
+
   ws.close();
   browser.kill();
   try { fs.rmSync(profile, { recursive: true, force: true }); } catch (e) {}
+
 
   console.log('\n================ 浏览器冒烟测试 ================');
   let bad = 0;
@@ -898,6 +934,7 @@ async function main() {
     console.log((r.ok ? '  ✓ ' : '  ✗ ') + r.name + (r.detail ? '  — ' + r.detail : ''));
     if (!r.ok) bad++;
   }
+
   if (problems.length) {
     console.log('\n--- 页面异常 / console.error ---');
     for (const p of Array.from(new Set(problems)).slice(0, 20)) console.log('  ! ' + p);

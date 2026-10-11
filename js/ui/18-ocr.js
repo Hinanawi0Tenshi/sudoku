@@ -583,6 +583,84 @@
   }
 
   /* ---------------- 面板挂载 ---------------- */
+  /**
+   * 手动填题。
+   *
+   * OCR 对不平整的照片本来就不稳；与其让玩家跟识别错误较劲，
+   * 不如给一块空白棋盘自己敲进去。拍得平整就用识别，拍不了就手填，
+   * 两条路最后都汇到同一个体检流程，不用各自维护一套校验。
+   */
+  function openManualEntry() {
+    const grid = new Array(81).fill(0);
+    let sel = 0;
+    const board = el('div.ocr-preview');
+    const cells = [];
+    const paint = () => {
+      for (let i = 0; i < 81; i++) {
+        const d = grid[i];
+        cells[i].textContent = d ? String(d) : '';
+        cells[i].className = 'ocr-cell' + (d ? ' has' : '') + (i === sel ? ' is-sel' : '');
+      }
+    };
+    for (let i = 0; i < 81; i++) {
+      const cell = el('div.ocr-cell', { onclick: () => { sel = i; paint(); } });
+      cells.push(cell);
+      board.appendChild(cell);
+    }
+    const put = (d) => { grid[sel] = d; paint(); };
+
+    const pad = el('div.manual-pad');
+    for (let d = 1; d <= 9; d++) {
+      pad.appendChild(el('button.btn.manual-key', { text: String(d), onclick: () => put(d) }));
+    }
+    pad.appendChild(el('button.btn.manual-key', { text: '⌫', title: '清空这一格', onclick: () => put(0) }));
+
+    const body = el('div.manual-wrap', null, [
+      el('p.lead', { text: '点格子选中，再点下面的数字填入。也可以直接用键盘：数字键填写、退格清空、方向键移动。' }),
+      board,
+      pad,
+    ]);
+
+    // 键盘输入：敲一整盘时手不离键盘比来回点快得多
+    body.tabIndex = 0;
+    body.addEventListener('keydown', (e) => {
+      if (e.key >= '1' && e.key <= '9') { put(Number(e.key)); e.preventDefault(); }
+      else if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') { put(0); e.preventDefault(); }
+      else if (e.key === 'ArrowLeft') { sel = Math.max(0, sel - 1); paint(); e.preventDefault(); }
+      else if (e.key === 'ArrowRight') { sel = Math.min(80, sel + 1); paint(); e.preventDefault(); }
+      else if (e.key === 'ArrowUp') { sel = Math.max(0, sel - 9); paint(); e.preventDefault(); }
+      else if (e.key === 'ArrowDown') { sel = Math.min(80, sel + 9); paint(); e.preventDefault(); }
+    });
+
+    paint();
+    modal({
+      title: '手动填题',
+      body: body,
+      footer: [
+        { label: '取消' },
+        {
+          label: '填入棋盘',
+          primary: true,
+          onClick: () => {
+            let filled = 0;
+            for (let i = 0; i < 81; i++) {
+              state.digits[i] = grid[i];
+              // 人工敲进去的当作可信，不该再被标黄要求逐格确认
+              state.confidences[i] = grid[i] ? 100 : -1;
+              if (grid[i]) filled++;
+            }
+            if (!filled) { toast('一格都还没填', 'err'); return; }
+            const clash = checkConflicts();
+            renderResult();
+            setStatus('已手动填入 ' + filled + ' 格'
+              + (clash ? '，其中 ' + clash + ' 格互相重复（标红），请先改' : '')
+              + '。确认无误后点「体检并载入棋局」。', clash ? 'warn' : 'ok');
+          },
+        },
+      ],
+    });
+    setTimeout(() => body.focus(), 30);
+  }
   function mount(root, ctx) {
     clear(root);
 
@@ -621,6 +699,13 @@
     ui = { drop: drop, stage: stage, status: status, result: result, log: logBox, btnRecognize: btnRecognize };
 
     root.appendChild(drop);
+    // 手填和识别是两条并行的入口：照片拍不平整时不该只能跟识别错误较劲
+    root.appendChild(
+      el('div.manual-entry-row', null, [
+        el('span', { text: '拍不了平整的照片？' }),
+        el('button.btn.btn-primary', { text: '手动填题', onclick: () => openManualEntry() }),
+      ])
+    );
     root.appendChild(fileInput);
     root.appendChild(stage);
     root.appendChild(el('div.btn-row', null, [btnDetect, btnRecognize, btnResetQuad]));
