@@ -62,16 +62,23 @@ const MAKE = (mode) => `(function () {
       p.fillRect(x, y, 1, 1);
     }
   }
-  // 真实照片的噪声是逐像素小幅抖动，不是成片的暗块
+  // 真实照片的噪声是逐像素小幅抖动，不是成片的暗块。
+  // 用固定种子的伪随机：原先用 Math.random 导致每次跑出的识别率都不一样
+  // （实测在 22%~28% 之间浮动），根本没法当回归门禁。
+  let seed = 0x2f6e2b1;
+  const rnd = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
   const id = p.getImageData(0, 0, SIZE, SIZE);
   for (let i = 0; i < id.data.length; i += 4) {
-    const n = (Math.random() - 0.5) * 24;
+    const n = (rnd() - 0.5) * 24;
     id.data[i] += n; id.data[i+1] += n; id.data[i+2] += n;
   }
   p.putImageData(id, 0, 0);
   for (let i = 0; i < 80; i++) {
-    const nx = Math.random()*SIZE, ny = Math.random()*SIZE;
-    const v = 60 + Math.random()*60;
+    const nx = rnd()*SIZE, ny = rnd()*SIZE;
+    const v = 60 + rnd()*60;
     p.fillStyle = 'rgb(' + (v|0) + ',' + (v|0) + ',' + (v|0) + ')';
     p.fillRect(nx, ny, 3, 3);
   }
