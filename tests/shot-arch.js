@@ -84,6 +84,29 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(600);
   await shot('shot-sudoku-play.png');
 
+  // 扫雷
+  await ev('document.getElementById("btn-home").click()');
+  await sleep(300);
+  await ev('Array.from(document.querySelectorAll(".game-card")).find((c) => c.querySelector(".gc-name").textContent === "扫雷").click()');
+  await sleep(500);
+  await shot('shot-mines-home.png');
+
+  await ev('document.querySelector(".home-item[data-go=play]").click()');
+  await sleep(300);
+  await ev('document.querySelector("#dialog-root .mine-level").click()');
+  await sleep(400);
+  await ev('document.querySelectorAll("#game-play .mine-grid .mcell")[40].click()');
+  await sleep(300);
+  await ev('document.getElementById("btn-mine-hint").click()');
+  await sleep(600);
+  await shot('shot-mines-play.png');
+
+  await ev('SD.Shell.openPage("扫雷教程", function (root) { SD.Mines.learn.render(root); })');
+  await sleep(400);
+  await ev('document.querySelectorAll(".mine-learn-head")[2].click()');
+  await sleep(700);
+  await shot('shot-mines-learn.png');
+
   ws.close(); b.kill();
   process.exit(0);
 })().catch((e) => { console.error('失败: ' + (e && e.message) + '\n' + (e && e.stack)); process.exit(1); });

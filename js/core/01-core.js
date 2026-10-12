@@ -98,59 +98,11 @@
   }
   const firstDigit = (m) => (m & -m ? Math.round(Math.log2(m & -m)) + 1 : 0);
 
-  /* ---------- 可复现随机数（mulberry32 + xmur3 种子哈希） ---------- */
-  function xmur3(str) {
-    let h = 1779033703 ^ str.length;
-    for (let i = 0; i < str.length; i++) {
-      h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
-      h = (h << 13) | (h >>> 19);
-    }
-    return function () {
-      h = Math.imul(h ^ (h >>> 16), 2246822507);
-      h = Math.imul(h ^ (h >>> 13), 3266489909);
-      h ^= h >>> 16;
-      return h >>> 0;
-    };
-  }
-
-  function mulberry32(seed) {
-    let a = seed >>> 0;
-    return function () {
-      a = (a + 0x6d2b79f5) >>> 0;
-      let t = a;
-      t = Math.imul(t ^ (t >>> 15), t | 1);
-      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  }
-
-  /** 种子可以是字符串或数字；字符串种子保证「每日挑战」可复现 */
-  function makeRng(seed) {
-    const norm = typeof seed === 'string' ? seed : String(seed);
-    return mulberry32(xmur3(norm)());
-  }
-
-  /** Fisher-Yates，原地洗牌 */
-  function shuffle(arr, rng) {
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = (rng() * (i + 1)) | 0;
-      const t = arr[i];
-      arr[i] = arr[j];
-      arr[j] = t;
-    }
-    return arr;
-  }
-
-  /* ---------- 文本 / 时间 ---------- */
-  const pad2 = (n) => (n < 10 ? '0' + n : String(n));
-
-  function formatDuration(ms) {
-    const total = Math.max(0, Math.floor(ms / 1000));
-    const h = (total / 3600) | 0;
-    const m = ((total % 3600) / 60) | 0;
-    const s = total % 60;
-    return h > 0 ? `${h}:${pad2(m)}:${pad2(s)}` : `${pad2(m)}:${pad2(s)}`;
-  }
+  /* ---------- 随机数、文本、时间 ----------
+   * 这几样跟数独没关系，通用工具都在平台层的 SD.Util；
+   * 这里再导出一遍只是为了让 SD.Base 的老调用方不用改。
+   */
+  const { makeRng, shuffle, pad2, formatDuration, versioned } = SD.Util;
 
   /** 棋盘 ↔ 可读字符串（. 和 0 表示空） */
   function gridToString(grid) {
@@ -181,18 +133,6 @@
     }
     return lines.join('\n');
   }
-
-  /*
-   * 给运行时拼出来的资源地址补上版本戳。
-   * index.html 里的 script/link 由那段内联脚本统一加版本戳，但 OCR 的
-   * worker / wasm / 语言包是运行时用字符串拼路径的，走不到那里——
-   * 而这几个文件占了整包 20M 的大头，恰恰最需要绕开缓存。
-   */
-  const versioned = (path) => {
-    const v = (global.SD && global.SD_BUILD) || '';
-    if (!v || path.indexOf('?v=') >= 0) return path;
-    return path + '?v=' + v;
-  };
 
   SD.Base = {
     N,

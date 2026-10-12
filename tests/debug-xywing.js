@@ -1,5 +1,6 @@
 globalThis.window = globalThis;
 const fs=require('fs'),path=require('path'),vm=require('vm');
+vm.runInThisContext(fs.readFileSync(path.join(__dirname,'..','js','platform','07-util.js'),'utf8'),{filename:'util'});
 for (const f of ['01-core','02-board','03-solver','04-generator','05-techniques','06-hints','07-rater'])
   vm.runInThisContext(fs.readFileSync(path.join(__dirname,'..','js/core',f+'.js'),'utf8'),{filename:f});
 const { Base:B, Validation, Techniques } = globalThis.SD;

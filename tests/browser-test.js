@@ -540,10 +540,18 @@ async function main() {
              info: '依次切到 ' + seen.join(' → ') + '，已存入设置' };
   })()`);
 
-  await step('设置页管着高亮与纠错开关', `(function(){
-    const boxes = Array.from(document.querySelectorAll('#page-root .switch.setting input'));
+  await step('设置页按游戏分区，数独那组开关都管用', `(function(){
+    // 设置页现在把每款游戏的设置各放一张卡片，所以要按分区取，不能整页扫——
+    // 整页扫会把扫雷的开关也算进来
+    const cards = Array.from(document.querySelectorAll('#page-root .card'));
+    const sudoku = cards.find((c) => {
+      const h = c.querySelector('h3');
+      return h && h.textContent === '数独';
+    });
+    if (!sudoku) return { ok: false, info: '设置页没有数独分区' };
+    const boxes = Array.from(sudoku.querySelectorAll('.switch.setting input'));
     const box = boxes.find((i) => i.closest('label').textContent.indexOf('高亮联动') === 0);
-    if (!box) return { ok: false, info: '设置页没有高亮开关' };
+    if (!box) return { ok: false, info: '数独分区里没有高亮开关' };
     const before = SD.Sudoku.store.settings().highlight;
     box.checked = !box.checked;
     box.dispatchEvent(new Event('change'));
@@ -551,7 +559,7 @@ async function main() {
     box.checked = before;
     box.dispatchEvent(new Event('change'));
     return { ok: boxes.length === 6 && after === !before,
-             info: boxes.length + ' 个开关，改动已写回设置' };
+             info: '数独分区 ' + boxes.length + ' 个开关，改动已写回设置' };
   })()`);
 
   await step('关于页写清了游戏的做法', `(async function(){
@@ -956,6 +964,206 @@ async function main() {
     return { ok: typed === '5' && d0 === 5 && shown >= 1,
              info: '格数=' + cells.length + '，键盘键=' + keys.length
                + '，敲入显示=' + typed + '，写入 state=' + d0 + '，结果区标出 ' + shown + ' 格' };
+  })()`);
+
+  /* ================= 扫雷 ================= */
+
+  // 前面几条数独用例开过弹窗没关。留着会挡住选择器，也会让「最后一个弹窗」认错人。
+  await evaluate('(function () { for (let i = 0; i < 20; i++) {'
+    + ' const b = document.querySelector("#dialog-root .modal-head .btn"); if (!b) break; b.click(); }'
+    + ' return document.querySelectorAll("#dialog-root .modal").length; })()');
+
+  await step('标题页把扫雷列为可进入的游戏', `(async function(){
+    document.getElementById('btn-home').click();
+    await new Promise(r => setTimeout(r, 200));
+    const cards = Array.from(document.querySelectorAll('.game-card'));
+    const card = cards.find((c) => c.querySelector('.gc-name').textContent === '扫雷');
+    const soon = card ? card.classList.contains('is-soon') : true;
+    return { ok: !!card && !soon, info: cards.length + ' 张卡片，扫雷可进入=' + (!!card && !soon) };
+  })()`);
+
+  await step('进入扫雷：首页四个入口', `(async function(){
+    Array.from(document.querySelectorAll('.game-card'))
+      .find((c) => c.querySelector('.gc-name').textContent === '扫雷').click();
+    await new Promise(r => setTimeout(r, 300));
+    const view = document.documentElement.getAttribute('data-view');
+    const items = Array.from(document.querySelectorAll('.home-item')).map((b) => b.dataset.go);
+    return { ok: view === 'home' && items.join(',') === 'play,daily,learn,mine',
+             info: '视图=' + view + '，入口 ' + items.join(' / ') };
+  })()`);
+
+  await step('初级盘面 81 格，开局还没布雷', `(async function(){
+    document.querySelector('.home-item[data-go=play]').click();
+    await new Promise(r => setTimeout(r, 200));
+    const lv = document.querySelector('#dialog-root .mine-level');
+    if (!lv) return { ok: false, info: '没有难度对话框' };
+    lv.click();
+    await new Promise(r => setTimeout(r, 300));
+    const cells = document.querySelectorAll('#game-play .mine-grid .mcell');
+    const b = SD.Mines.app.getBoard();
+    const view = document.documentElement.getAttribute('data-view');
+    return { ok: cells.length === 81 && view === 'game' && !!b && !b.placed,
+             info: cells.length + ' 格，视图=' + view + '，布雷推迟到首点=' + (!!b && !b.placed) };
+  })()`);
+
+  await step('首点必安全：首点连同八邻居都不是雷', `(async function(){
+    document.querySelectorAll('#game-play .mine-grid .mcell')[40].click();
+    await new Promise(r => setTimeout(r, 200));
+    const b = SD.Mines.app.getBoard();
+    let safe = !b.mine[40];
+    for (const j of b.nbr[40]) if (b.mine[j]) safe = false;
+    return { ok: safe && b.placed && b.opened > 0,
+             info: '已翻开 ' + b.opened + ' 格，首点及八邻居无雷=' + safe };
+  })()`);
+
+  await step('提示面板给出的每一条「必然」结论都成立', `(async function(){
+    document.getElementById('btn-mine-hint').click();
+    await new Promise(r => setTimeout(r, 400));
+    const chips = document.querySelectorAll('.mine-chip');
+    const concl = document.querySelector('.mine-concl');
+    const an = SD.Mines.app.analyze();
+    const b = SD.Mines.app.getBoard();
+    let bad = '';
+    for (const st of an.steps) {
+      if (!st.certain) continue;
+      for (const i of st.mines) if (!b.mine[i]) bad = st.id + ' 误判第 ' + i + ' 格为雷';
+      for (const i of st.safe) if (b.mine[i]) bad = st.id + ' 误判第 ' + i + ' 格为安全';
+    }
+    return { ok: chips.length > 0 && !!concl && !bad,
+             info: chips.length + ' 条推理' + (bad ? '，' + bad : '，全部与真实雷分布一致') };
+  })()`);
+
+  await step('执行提示会真的动盘面', `(async function(){
+    const b = SD.Mines.app.getBoard();
+    const before = b.opened + b.flags;
+    document.getElementById('btn-mine-hint-apply').click();
+    await new Promise(r => setTimeout(r, 300));
+    const after = b.opened + b.flags;
+    return { ok: after > before || b.state !== 'playing',
+             info: '已翻开+旗 ' + before + ' → ' + after + '，状态=' + b.state };
+  })()`);
+
+  await step('插旗模式可切换', `(async function(){
+    const btn = document.getElementById('btn-mine-flag');
+    btn.click();
+    await new Promise(r => setTimeout(r, 100));
+    const on = SD.Mines.store.settings().flagMode;
+    const lit = btn.classList.contains('is-on');
+    btn.click();
+    await new Promise(r => setTimeout(r, 100));
+    return { ok: on === true && lit && SD.Mines.store.settings().flagMode === false,
+             info: '打开=' + on + '，按钮高亮=' + lit + '，再点已关=' + (SD.Mines.store.settings().flagMode === false) };
+  })()`);
+
+  await step('每日挑战：同一天同一张图，开局已翻开一格', `(async function(){
+    SD.Mines.app.startDaily();
+    await new Promise(r => setTimeout(r, 250));
+    const a = SD.Mines.app.getBoard();
+    const seed = a.seed;
+    const opened = a.open.reduce((s, v) => s + v, 0);
+    SD.Mines.app.startDaily();
+    await new Promise(r => setTimeout(r, 250));
+    const c = SD.Mines.app.getBoard();
+    const same = a.mine.join('') === c.mine.join('') && a.open.join('') === c.open.join('');
+    return { ok: same && opened > 0 && seed.indexOf('mines-daily-') === 0,
+             info: '种子=' + seed + '，两次同图=' + same + '，开局已翻开 ' + opened + ' 格' };
+  })()`);
+
+  await step('教程：九种技巧都能展开出演示盘面', `(async function(){
+    const t0 = Date.now();
+    SD.Shell.openPage('扫雷教程', (root) => SD.Mines.learn.render(root));
+    await new Promise(r => setTimeout(r, 300));
+    const heads = Array.from(document.querySelectorAll('.mine-learn-head'));
+    if (heads.length !== 9) return { ok: false, info: '技巧卡片 ' + heads.length + ' 张，应为 9' };
+    const missing = [];
+    for (const h of heads) {
+      h.click();
+      await new Promise(r => setTimeout(r, 60));
+      const card = h.closest('.mine-learn-card');
+      if (!card.querySelector('.mine-grid')) missing.push(card.querySelector('.mine-learn-name').textContent);
+    }
+    const boards = document.querySelectorAll('.mine-learn-card .mine-grid').length;
+    return { ok: missing.length === 0,
+             info: boards + '/9 种有演示盘面，全部展开耗时 ' + (Date.now() - t0) + 'ms'
+               + (missing.length ? '，缺：' + missing.join('、') : '') };
+  })()`);
+
+  await step('自定义盘面能定宽高雷数', `(async function(){
+    document.getElementById('page-back').click();
+    await new Promise(r => setTimeout(r, 200));
+    document.querySelector('.home-item[data-go=play]').click();
+    await new Promise(r => setTimeout(r, 200));
+    const btns = document.querySelectorAll('#dialog-root .mine-level');
+    btns[btns.length - 1].click();
+    await new Promise(r => setTimeout(r, 200));
+    const inputs = document.querySelectorAll('#dialog-root .mine-custom input');
+    if (inputs.length !== 3) return { ok: false, info: '自定义对话框没有三个输入框' };
+    inputs[0].value = '12'; inputs[1].value = '10'; inputs[2].value = '20';
+    inputs[2].dispatchEvent(new Event('input'));
+    const start = Array.from(document.querySelectorAll('#dialog-root .btn')).find((b) => b.textContent === '开始');
+    if (!start) return { ok: false, info: '没有开始按钮' };
+    start.click();
+    await new Promise(r => setTimeout(r, 300));
+    const b = SD.Mines.app.getBoard();
+    const cells = document.querySelectorAll('#game-play .mine-grid .mcell').length;
+    return { ok: b.w === 12 && b.h === 10 && b.mines === 20 && cells === 120,
+             info: b.w + '×' + b.h + ' · ' + b.mines + ' 雷，渲染 ' + cells + ' 格' };
+  })()`);
+
+  await step('通关结算：记成绩、给点数、弹窗', `(async function(){
+    const before = SD.Points.total();
+    const b = SD.Mines.app.getBoard();
+    const cells = document.querySelectorAll('#game-play .mine-grid .mcell');
+    cells[0].click();                    // 首点布雷
+    await new Promise(r => setTimeout(r, 120));
+    // 只点非雷格，走真实点击路径，胜负结算才会被触发
+    for (let i = 0; i < cells.length; i++) if (!b.mine[i]) cells[i].click();
+    await new Promise(r => setTimeout(r, 500));
+    const box = Array.from(document.querySelectorAll('#dialog-root .modal')).pop();
+    const title = box ? box.querySelector('h2').textContent : '';
+    const after = SD.Points.total();
+    const bucket = SD.Mines.store.bucket('custom');
+    const close = box ? box.querySelector('.modal-head .btn') : null;
+    if (close) close.click();
+    return { ok: /排完了/.test(title) && after > before && bucket.wins > 0,
+             info: '弹窗「' + title + '」，点数 ' + before + ' → ' + after + '，自定义档通关 ' + bucket.wins + ' 次' };
+  })()`);
+
+  await step('踩雷结算：摊出全部雷并标出错旗', `(async function(){
+    SD.Mines.app.startLevel('beginner');
+    await new Promise(r => setTimeout(r, 250));
+    const b = SD.Mines.app.getBoard();
+    const cells = document.querySelectorAll('#game-play .mine-grid .mcell');
+    cells[0].click();
+    await new Promise(r => setTimeout(r, 120));
+    let wrongFlag = -1;
+    for (let i = 1; i < cells.length; i++) if (!b.mine[i] && !b.open[i]) { wrongFlag = i; break; }
+    if (wrongFlag >= 0) {
+      cells[wrongFlag].dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    }
+    await new Promise(r => setTimeout(r, 120));
+    let hit = -1;
+    for (let i = 0; i < cells.length; i++) if (b.mine[i] && !b.open[i]) { hit = i; break; }
+    cells[hit].click();
+    await new Promise(r => setTimeout(r, 500));
+    const box = Array.from(document.querySelectorAll('#dialog-root .modal')).pop();
+    const title = box ? box.querySelector('h2').textContent : '';
+    const wrongMarked = document.querySelectorAll('.mine-grid .mcell.is-wrong-flag').length;
+    const boom = document.querySelectorAll('.mine-grid .mcell.is-boom').length;
+    const close = box ? box.querySelector('.modal-head .btn') : null;
+    if (close) close.click();
+    return { ok: /踩雷/.test(title) && boom === 1 && (wrongFlag < 0 || wrongMarked === 1),
+             info: '弹窗「' + title + '」，爆炸点 ' + boom + ' 个，标出的错旗 ' + wrongMarked + ' 面' };
+  })()`);
+
+  await step('扫雷与数独的数据各存各的', `(function(){
+    const mines = localStorage.getItem('puzzle-hub:mines:v1');
+    const sudoku = localStorage.getItem('sudoku-studio:v1');
+    if (!mines || !sudoku) return { ok: false, info: 'mines=' + !!mines + '，sudoku=' + !!sudoku };
+    const m = JSON.parse(mines);
+    const s = JSON.parse(sudoku);
+    return { ok: !!m.stats && !!s.stats && !!s.userBank && !m.userBank,
+             info: '扫雷键有 stats 没有 userBank；数独键两者都有——两份数据互不干扰' };
   })()`);
 
   ws.close();

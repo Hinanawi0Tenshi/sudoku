@@ -14,6 +14,8 @@ globalThis.window = globalThis;
 
 const ROOT = path.join(__dirname, '..');
 const CORE_FILES = [
+  // 01-core 依赖平台层的 SD.Util（随机数、格式化都搬过去了），先加载它
+  'js/platform/07-util.js',
   'js/core/01-core.js',
   'js/core/02-board.js',
   'js/core/03-solver.js',

@@ -1,6 +1,8 @@
 'use strict';
 const fs = require('fs'), vm = require('vm');
 globalThis.window = globalThis;
+// 01-core 依赖平台层的 SD.Util，先把工具层跑起来
+vm.runInThisContext(fs.readFileSync('js/platform/07-util.js','utf8'), { filename: 'util' });
 for (const f of ['01-core','02-board','03-solver','05-techniques','07-rater','04-generator'])
   vm.runInThisContext(fs.readFileSync('js/core/'+f+'.js','utf8'), { filename: f });
 const B = SD.Base, V = SD.Validation, T = SD.Techniques;
