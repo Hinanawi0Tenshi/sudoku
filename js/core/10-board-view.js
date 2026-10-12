@@ -24,10 +24,14 @@
       });
       const value = el('span.cell-value');
       const notes = el('div.cell-notes');
+      // 笼和：杀手数独在笼子最靠左上那一格写一个「和」，其余玩法不显示
+      const cage = el('span.cell-cage');
       c.appendChild(value);
       c.appendChild(notes);
+      c.appendChild(cage);
       c._value = value;
       c._notes = notes;
+      c._cage = cage;
       cells.push(c);
       board.appendChild(c);
     }
@@ -36,6 +40,37 @@
     // 存成字符串而不是直接加类名——render() 每次都会整体重写 className，直接加的会被冲掉。
     // 提示里被指名的格子，独立于 render 维护：悬停引用不该触发整盘重绘
     let refCells = new Set();
+    // 笼子的边框类和笼和都按题目算一次就缓存：render() 每次都会重写 className，
+    // 每次重算 81 格的四条边纯属浪费，而笼子在整局里根本不变。
+    let cageRef = null;
+    const cageCls = new Array(B.CELL_COUNT).fill('');
+    const cageSum = new Array(B.CELL_COUNT).fill('');
+
+    function buildCages(cages) {
+      cageRef = cages;
+      for (let i = 0; i < B.CELL_COUNT; i++) { cageCls[i] = ''; cageSum[i] = ''; }
+      if (!cages || !cages.cageOf) return;
+      const of = cages.cageOf;
+      for (let i = 0; i < B.CELL_COUNT; i++) {
+        const r = B.ROW_OF[i];
+        const c = B.COL_OF[i];
+        let s = '';
+        if (r === 0 || of[i - 9] !== of[i]) s += ' cage-t';
+        if (r === 8 || of[i + 9] !== of[i]) s += ' cage-b';
+        if (c === 0 || of[i - 1] !== of[i]) s += ' cage-l';
+        if (c === 8 || of[i + 1] !== of[i]) s += ' cage-r';
+        cageCls[i] = s;
+      }
+      for (const cg of cages.list || []) {
+        let anchor = cg.cells[0];
+        for (const x of cg.cells) {
+          if (B.ROW_OF[x] < B.ROW_OF[anchor] ||
+              (B.ROW_OF[x] === B.ROW_OF[anchor] && B.COL_OF[x] < B.COL_OF[anchor])) anchor = x;
+        }
+        cageSum[anchor] = String(cg.sum);
+      }
+    }
+
     const staticCls = new Array(B.CELL_COUNT).fill('');
     for (let i = 0; i < B.CELL_COUNT; i++) {
       let s = '';
@@ -61,6 +96,10 @@
       const hintCells = u.hint ? new Set(u.hint.cells || []) : null;
       // 删候选的格子：红色。技巧盯着的格子：蓝色。两者含义不同，必须分开。
       const elimCells = u.hint ? new Set(u.hint.elimCells || []) : null;
+      if (u.cages !== cageRef) buildCages(u.cages);
+      // 选中哪一格，整个笼子一起点亮。杀手盘面上「这一格属于哪个笼子」
+      // 是每一步都要看的信息，靠肉眼顺着虚线找太累。
+      const selCage = u.cages && u.highlightCage && sel >= 0 ? u.cages.cageOf[sel] : -2;
       const hintMarks = new Map();
       if (u.hint) {
         for (const m of u.hint.marks || []) hintMarks.set(m.cell + ':' + m.digit, 'keep');
@@ -98,7 +137,9 @@
         if (elimCells && elimCells.has(i)) cls += ' is-elim';
         if (u.hintPlaced && u.hintPlaced.has(i)) cls += ' is-hint-value';
         if (refCells.has(i)) cls += ' is-ref';
-        c.className = 'cell' + staticCls[i] + cls;
+        if (selCage >= -1 && u.cages.cageOf[i] === selCage && i !== sel) cls += ' is-cage';
+        c.className = 'cell' + staticCls[i] + cageCls[i] + cls;
+        if (c._cage.textContent !== cageSum[i]) c._cage.textContent = cageSum[i];
 
         if (d) {
           c._value.textContent = String(d);

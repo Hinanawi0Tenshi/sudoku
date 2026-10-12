@@ -107,6 +107,38 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(700);
   await shot('shot-mines-learn.png');
 
+  // 杀手数独
+  await ev('document.getElementById("btn-home").click()');
+  await sleep(300);
+  await ev('Array.from(document.querySelectorAll(".game-card")).find((c) => c.querySelector(".gc-name").textContent === "杀手数独").click()');
+  await sleep(500);
+  await shot('shot-killer-home.png');
+
+  await ev('document.querySelector(".home-item[data-go=play]").click()');
+  await sleep(300);
+  await ev('document.querySelectorAll("#dialog-root .diff-btn")[2].click()');
+  for (let i = 0; i < 60; i++) {
+    await sleep(200);
+    if (await ev('!!(SD.Killer.app.getPuzzle() && document.querySelectorAll("#board .cell-cage").length)')) break;
+  }
+  await ev('document.querySelectorAll("#board .cell")[40].click()');
+  await sleep(300);
+  await ev('document.getElementById("btn-k-hint").click()');
+  await sleep(700);
+  await shot('shot-killer-play.png');
+
+  await ev('SD.Shell.openPage("杀手数独教程", function (root) { SD.Killer.learn.render(root); })');
+  await sleep(400);
+  await ev('document.querySelectorAll(".mine-learn-head")[3].click()');
+  await sleep(1200);
+  // 演示盘面在页面下方，先滚到它再截，否则只截到半截
+  await ev('(function () { const d = document.querySelector(".killer-demo"); if (d) d.scrollIntoView({ block: "center" }); return true; })()');
+  await sleep(300);
+  await shot('shot-killer-learn.png');
+  console.log('  演示盘面字号: ' + await ev('(function () { const v = document.querySelector(".killer-demo .cell-value");'
+    + ' const c = document.querySelector(".killer-demo .cell"); const s = document.querySelector(".killer-demo .cell-cage");'
+    + ' return v ? getComputedStyle(v).fontSize + " / 格宽 " + Math.round(c.getBoundingClientRect().width) + "px / 笼和 " + getComputedStyle(s).fontSize : "无"; })()'));
+
   ws.close(); b.kill();
   process.exit(0);
 })().catch((e) => { console.error('失败: ' + (e && e.message) + '\n' + (e && e.stack)); process.exit(1); });

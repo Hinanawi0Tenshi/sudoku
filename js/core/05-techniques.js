@@ -1947,6 +1947,7 @@
     findStep: findStep,
     findStepFrom: findStepFrom,
     findAll: findAll,
+    decorate: decorate,
     commit: commit,
     applyPlacements: applyPlacements,
     simulate: simulate,

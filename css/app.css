@@ -1656,3 +1656,42 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .mine-demo { margin: 8px 0; padding: 8px 0; overflow: auto; }
 
 .mine-more { margin: 10px 0 0; font-size: 12.5px; color: var(--text-faint); }
+
+/* ---------------- 杀手数独 ----------------
+ * 笼子边框走 ::before 的虚线，不动格子自身的 border 和 box-shadow——
+ * 那两样已经被 3×3 宫分隔线、选中框、提示高亮占着了。
+ */
+:root {
+  --cage-line: color-mix(in srgb, var(--text) 36%, transparent);
+}
+.cell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 0 dashed var(--cage-line);
+  z-index: 2;
+}
+.cell.cage-t::before { border-top-width: 1.5px; }
+.cell.cage-r::before { border-right-width: 1.5px; }
+.cell.cage-b::before { border-bottom-width: 1.5px; }
+.cell.cage-l::before { border-left-width: 1.5px; }
+.cell-cage {
+  position: absolute;
+  top: 1px;
+  left: 3px;
+  font-size: clamp(9px, 1.7vw, 12px);
+  font-weight: 650;
+  line-height: 1;
+  color: var(--text-dim);
+  pointer-events: none;
+}
+.cell.is-cage { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.killer-logo { background: linear-gradient(135deg, #a855f7, #6d28d9); }
+.killer-demo { margin: 8px 0; max-width: 340px; }
+.killer-demo .board { box-shadow: none; }
+
+/* 教程演示盘面比主棋盘小得多，字号必须跟着缩——否则 33px 的数字塞进 38px 的格子里会叠字 */
+.killer-demo .cell-value { font-size: clamp(12px, 2.1vw, 19px); }
+.killer-demo .cell-cage { font-size: 8.5px; top: 0; left: 2px; }
+.killer-demo .board { border-width: 1px; }

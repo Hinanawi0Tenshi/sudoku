@@ -67,8 +67,18 @@ async function main() {
       ws.send(JSON.stringify({ id, method, params: params || {} }));
     });
 
-  const evaluate = async (expr) => {
-    const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true });
+  /**
+   * 求值带超时。页面里一旦有死循环或者渲染进程崩了，Runtime.evaluate 永远不会返回，
+   * 整个测试就无声无息地挂住——看不到任何输出，也分不清是卡在哪一步。
+   * 宁可报一条「求值超时」，也不要让人对着空日志猜。
+   */
+  const evaluate = async (expr, timeoutMs) => {
+    const r = await Promise.race([
+      send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true }),
+      new Promise((_, rej) => setTimeout(
+        () => rej(new Error('求值超时 ' + (timeoutMs || 60000) + 'ms：' + String(expr).slice(0, 90))),
+        timeoutMs || 60000)),
+    ]);
     if (r.exceptionDetails) throw new Error('求值失败: ' + (r.exceptionDetails.exception ? r.exceptionDetails.exception.description : r.exceptionDetails.text));
     return r.result.value;
   };
@@ -129,6 +139,9 @@ async function main() {
     } catch (e) {
       check(name, false, '抛异常: ' + e.message);
     }
+    // 边跑边打一行进度：万一后面某一步把进程挂住，日志里至少看得到卡在哪
+    const last = results[results.length - 1];
+    console.log((last.ok ? '  ✓ ' : '  ✗ ') + last.name);
   };
 
   await step('棋盘渲染出 81 格', `(function(){
@@ -1164,6 +1177,193 @@ async function main() {
     const s = JSON.parse(sudoku);
     return { ok: !!m.stats && !!s.stats && !!s.userBank && !m.userBank,
              info: '扫雷键有 stats 没有 userBank；数独键两者都有——两份数据互不干扰' };
+  })()`);
+
+  /* ================= 杀手数独 ================= */
+
+  await evaluate('(function () { for (let i = 0; i < 20; i++) {'
+    + ' const b = document.querySelector("#dialog-root .modal-head .btn"); if (!b) break; b.click(); }'
+    + ' return true; })()');
+
+  await step('标题页把杀手数独列为可进入', `(async function(){
+    document.getElementById('btn-home').click();
+    await new Promise(r => setTimeout(r, 250));
+    const cards = Array.from(document.querySelectorAll('.game-card'));
+    const card = cards.find((c) => c.querySelector('.gc-name').textContent === '杀手数独');
+    const soon = card ? card.classList.contains('is-soon') : true;
+    const all = cards.map((c) => c.querySelector('.gc-name').textContent + (c.classList.contains('is-soon') ? '(开发中)' : ''));
+    return { ok: !!card && !soon, info: all.join(' / ') };
+  })()`);
+
+  await step('进入杀手数独：首页四个入口', `(async function(){
+    Array.from(document.querySelectorAll('.game-card'))
+      .find((c) => c.querySelector('.gc-name').textContent === '杀手数独').click();
+    await new Promise(r => setTimeout(r, 300));
+    const view = document.documentElement.getAttribute('data-view');
+    const items = Array.from(document.querySelectorAll('.home-item')).map((b) => b.dataset.go);
+    return { ok: view === 'home' && items.join(',') === 'play,daily,learn,mine',
+             info: '视图=' + view + '，入口 ' + items.join(' / ') };
+  })()`);
+
+  await step('出题：笼子切满全盘、唯一解、笼和与真解一致', `(async function(){
+    document.querySelector('.home-item[data-go=play]').click();
+    await new Promise(r => setTimeout(r, 250));
+    const btns = document.querySelectorAll('#dialog-root .diff-btn');
+    if (!btns.length) return { ok: false, info: '没有难度对话框' };
+    btns[0].click();
+    for (let i = 0; i < 80; i++) {
+      await new Promise(r => setTimeout(r, 200));
+      if (document.documentElement.getAttribute('data-view') === 'game' && SD.Killer.app.getPuzzle()) break;
+    }
+    const puz = SD.Killer.app.getPuzzle();
+    const g = SD.Killer.app.getGame();
+    const sol = g.state.solution;
+    if (!puz || !sol) return { ok: false, info: '没有拿到题目' };
+    const covered = new Set();
+    let sumOk = true, uniq = true;
+    for (const cg of puz.list) {
+      let s = 0;
+      const seen = new Set();
+      for (const i of cg.cells) {
+        if (covered.has(i)) uniq = false;
+        covered.add(i);
+        s += sol[i];
+        if (seen.has(sol[i])) sumOk = false;
+        seen.add(sol[i]);
+      }
+      if (s !== cg.sum) sumOk = false;
+    }
+    return { ok: covered.size === 81 && uniq && sumOk,
+             info: puz.list.length + ' 个笼子，覆盖 ' + covered.size + ' 格，笼和与真解一致=' + sumOk };
+  })()`);
+
+  await step('盘面把笼子画出来了（虚线边框 + 笼和）', `(function(){
+    const cells = document.querySelectorAll('#board .cell');
+    const sums = Array.from(document.querySelectorAll('#board .cell-cage')).filter((n) => n.textContent).length;
+    const edges = document.querySelectorAll('#board .cell.cage-t, #board .cell.cage-r, #board .cell.cage-b, #board .cell.cage-l').length;
+    const puz = SD.Killer.app.getPuzzle();
+    return { ok: cells.length === 81 && sums === puz.list.length && edges > 0,
+             info: cells.length + ' 格，笼和标签 ' + sums + ' 个（应 ' + puz.list.length + '），带笼边的格子 ' + edges + ' 个' };
+  })()`);
+
+  await step('提示面板：每一条结论都与真解一致', `(async function(){
+    document.getElementById('btn-k-hint').click();
+    await new Promise(r => setTimeout(r, 500));
+    const g = SD.Killer.app.getGame();
+    const sol = g.state.solution;
+    const list = g.hintList(5);
+    const chips = document.querySelectorAll('#hint-output .mine-chip');
+    const concl = document.querySelector('#hint-output .mine-concl');
+    let bad = '';
+    for (const e of list) {
+      for (const p of e.step.placements) if (sol[p.cell] !== p.digit) bad = e.step.id + ' 把 ' + p.cell + ' 填成 ' + p.digit;
+      for (const el2 of e.step.eliminations) if (sol[el2.cell] === el2.digit) bad = e.step.id + ' 删掉真解 ' + el2.cell + '=' + el2.digit;
+      if (bad) break;
+    }
+    return { ok: list.length > 0 && chips.length > 0 && !!concl && !bad,
+             info: list.length + ' 条推理（' + chips.length + ' 个 chip）' + (bad ? '，' + bad : '，全部与真解一致') };
+  })()`);
+
+  await step('执行提示会真的动盘面', `(async function(){
+    const g = SD.Killer.app.getGame();
+    const before = Array.from(g.state.board.grid).filter(Boolean).length;
+    document.getElementById('btn-k-hint-apply').click();
+    await new Promise(r => setTimeout(r, 400));
+    const after = Array.from(g.state.board.grid).filter(Boolean).length;
+    return { ok: after > before || g.state.won, info: '已填格 ' + before + ' → ' + after };
+  })()`);
+
+  await step('笼内定数：一格笼子直接给出数字', `(async function(){
+    // 一路用提示推，直到出现一格笼子，验证它填的就是笼和
+    const g = SD.Killer.app.getGame();
+    const puz = SD.Killer.app.getPuzzle();
+    const single = puz.list.find((c) => c.cells.length === 1);
+    if (!single) return { ok: false, info: '这道题没有一格笼子' };
+    const i = single.cells[0];
+    // 提示执行若干步，直到这一格被填上（上限兜底，避免题目本身不推进时空转）
+    for (let k = 0; k < 30 && !g.state.board.grid[i]; k++) {
+      const list = g.hintList(5);
+      if (!list.length) break;
+      g.applyStep(list[0], true);
+    }
+    return { ok: g.state.board.grid[i] === single.sum,
+             info: '一格笼子 R' + (Math.floor(i/9)+1) + 'C' + (i%9+1) + ' 和=' + single.sum + '，盘面填了 ' + g.state.board.grid[i] };
+  })()`);
+
+  await step('教程：六条笼子技巧都能展开出演示盘面', `(async function(){
+    const t0 = Date.now();
+    SD.Shell.openPage('杀手数独教程', (root) => SD.Killer.learn.render(root));
+    await new Promise(r => setTimeout(r, 400));
+    const heads = Array.from(document.querySelectorAll('.mine-learn-head'));
+    if (heads.length !== 6) return { ok: false, info: '技巧卡片 ' + heads.length + ' 张，应为 6' };
+    const missing = [];
+    for (const h of heads) {
+      h.click();
+      await new Promise(r => setTimeout(r, 100));
+      const card = h.closest('.mine-learn-card');
+      if (!card.querySelector('#board .cell') && !card.querySelector('.board .cell')) {
+        missing.push(card.querySelector('.mine-learn-name').textContent);
+      }
+    }
+    const boards = document.querySelectorAll('.killer-demo .board').length;
+    return { ok: missing.length === 0,
+             info: boards + '/6 种有演示盘面，全部展开耗时 ' + (Date.now() - t0) + 'ms'
+               + (missing.length ? '，缺：' + missing.join('、') : '') };
+  })()`);
+
+  await step('冲突判定把笼内重复和笼和超限也算进去', `(async function(){
+    document.getElementById('page-back').click();
+    await new Promise(r => setTimeout(r, 200));
+    // 入门档笼子只有 1-2 格，凑不出「同笼但不同行列宫」的格子对；
+    // 换困难档——只有这种格子对才能证明是笼子规则抓出来的，而不是行列宫规则。
+    const oldPuz = SD.Killer.app.getPuzzle();
+    SD.Killer.app.newGame('hard');
+    for (let i = 0; i < 60; i++) {
+      await new Promise(r => setTimeout(r, 200));
+      if (SD.Killer.app.getPuzzle() && SD.Killer.app.getPuzzle() !== oldPuz) break;
+    }
+    const g = SD.Killer.app.getGame();
+    const puz = SD.Killer.app.getPuzzle();
+    let pair = null;
+    for (const cg of puz.list) {
+      for (let a = 0; a < cg.cells.length && !pair; a++) {
+        for (let b = a + 1; b < cg.cells.length && !pair; b++) {
+          const i = cg.cells[a], j = cg.cells[b];
+          const peer = SD.Base.ROW_OF[i] === SD.Base.ROW_OF[j]
+            || SD.Base.COL_OF[i] === SD.Base.COL_OF[j]
+            || SD.Base.BOX_OF[i] === SD.Base.BOX_OF[j];
+          if (!peer) pair = [i, j];
+        }
+      }
+      if (pair) break;
+    }
+    if (!pair) return { ok: false, info: '困难档也没找到「同笼不同行列宫」的格子对' };
+
+    // 先确认干净的盘面不报冲突
+    const before = g.conflicts().size;
+    g.state.board.grid[pair[0]] = 5;
+    g.state.board.grid[pair[1]] = 5;
+    const conf = g.conflicts();
+    const caught = conf.has(pair[0]) && conf.has(pair[1]);
+    g.state.board.grid[pair[0]] = 0;
+    g.state.board.grid[pair[1]] = 0;
+
+    // 再把某个笼子整个填成 9：笼和必然超（9n 一定大于 n 个不同数字能凑出的最大和），
+    // 而且这些格子未必互为行列宫关联格，所以只有笼和规则能把它们全标出来
+    const cg2 = puz.list.find((c) => c.cells.length >= 2);
+    for (const i of cg2.cells) g.state.board.grid[i] = 9;
+    const over = g.conflicts();
+    const overCaught = cg2.cells.every((i) => over.has(i));
+    for (const i of cg2.cells) g.state.board.grid[i] = 0;
+    return { ok: caught && overCaught && before === 0,
+             info: '同笼不同区的重复被抓=' + caught + '，笼和超限被抓=' + overCaught };
+  })()`);
+
+  await step('存档写进杀手数独自己的命名空间', `(function(){
+    const raw = localStorage.getItem('puzzle-hub:killer:v1');
+    if (!raw) return { ok: false, info: '没有存档' };
+    const d = JSON.parse(raw);
+    return { ok: !!d.settings && !!d.stats, info: 'settings ' + Object.keys(d.settings).length + ' 项, stats ' + Object.keys(d.stats).length + ' 项' };
   })()`);
 
   ws.close();

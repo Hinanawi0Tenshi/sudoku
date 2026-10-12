@@ -36,7 +36,7 @@
 - 测试风格：纯 Node 内置模块，零 npm 依赖。
 
 ## 架构（2026-10-13 重构）
-- 三款游戏：数独、扫雷已实装；杀手数独只注册占位，标题页显示「开发中」。
+- 三款游戏全部实装：数独、杀手数独、扫雷。
 - 分层：`js/platform/`（游戏无关）→ `js/core/`（9×9 数独族共用算法与渲染原语）→ `js/games/<游戏>/`。
 - **加一款新游戏** = 写一个文件调 `SD.Registry.register({...})` + index.html 加一行 `<script>`，
   平台层一行都不用改。契约字段见 `js/platform/01-registry.js` 的注释。
@@ -58,6 +58,23 @@
     巨型分量、次次超限。全局雷数由卷积那一步管。这个坑曾让枚举失败率高达 91%。
   - 稀有技巧（单格已够数、全局雷数）在随机对局里几乎不出现，教程示例用手工夹具
     （M.fixtures），单测和教程共用同一份，别两处各画一遍。
+- **杀手数独（js/games/killer/）和数独共用 js/core**：棋盘、对局控制器、技巧引擎、棋盘渲染都复用。
+  - 对局控制器已经提到 `js/core/11-game.js`（SD.GameBase），六个依赖由各游戏注入：
+    settings / recordTechnique / conflicts / isComplete / hints / solve。数独那边是薄包装。
+  - 棋盘渲染加了 `opts.cages`（笼子虚线 + 笼和标签）和 `highlightCage`（选中即点亮整个笼子）。
+  - **依赖唯一解/致命模式的技巧在杀手盘面上不成立**：交换两格会破坏笼和，「第二个解」不存在。
+    唯一矩形整族被排除。这条是性质测试跑出来的（它删掉了真解数字），不是推测。
+  - 枚举用的组合表 COMBOS[k][s] 在加载时一次算完（512 个子集）。
+  - 出题是「先出终盘再切笼子」，切完验唯一解，不唯一就重切。笼子越大越难唯一：
+    2 格笼 83%、5 格笼 20%、6 格笼 0%，所以上限卡在 4 格。
+  - **标准族里 finny-fish / 强制链那几条在杀手盘面上极贵**（开局全空，搜索空间拉满，
+    实测 finny-fish 一次 28ms）。它们被标成 expensive，只有别的技巧都推不动时才跑——
+    提示面板从 67ms 降到 1ms。
+  - 踩过的坑：`B.UNITS[u]` 是 Int8Array，`filter`/`slice` 返回的还是 Int8Array，
+    而 `Int8Array.prototype.map` 会把字符串强转成 0——讲解里的坐标全渲染成「0、0」。
+    现在单测里有一条断言盯着「step.cells 必须是真数组」。
+  - 踩过的坑：脚本按数字前缀加载，`04-generator` 依赖 `03-techniques`。
+    顺序写反时 Node 测试（手动列文件）能过、浏览器里却 `Cannot read properties of undefined`。
 
 ## 沙箱环境限制
 - **看沙箱模式**：`danger-full-access` 下 headless Edge 跑得动，`browser-test.js` / `ocr-test.js` /
