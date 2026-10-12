@@ -55,7 +55,7 @@ const WAIT_READY = [
   'var tries = 0;',
   'var timer = setInterval(function() {',
   '  tries++;',
-  '  var g = SD.App.getGame();',
+  '  var g = SD.Sudoku.app.getGame();',
   '  if (!g) return;',
   '  var empty = 0;',
   '  for (var k = 0; k < 81; k++) if (!g.state.board.grid[k]) empty++;',
@@ -67,7 +67,7 @@ const WAIT_READY = [
 // 造几条历史，好让日历同时有奖杯、进度环和空白三种状态
 const DAILY_SEED = [
   '(function(){',
-  '  var s = SD.Store.stats(), t = new Date();',
+  '  var s = SD.Sudoku.store.stats(), t = new Date();',
   '  function k(n){ var d = new Date(t.getFullYear(), t.getMonth(), t.getDate() - n); return SD.Generator.dailySeed(d); }',
   '  s.daily[k(5)] = { timeMs: 54000, won: true, tries: 1, filled: 81, total: 81 };',
   '  s.daily[k(4)] = { timeMs: 88000, won: true, tries: 2, filled: 81, total: 81 };',
@@ -75,7 +75,7 @@ const DAILY_SEED = [
   '  s.daily[k(2)] = { timeMs: 71000, won: true, tries: 1, filled: 81, total: 81 };',
   '  s.daily[k(1)] = { timeMs: null, won: false, tries: 0, filled: 28, total: 81 };',
   '  s.daily[k(0)] = { timeMs: null, won: false, tries: 0, filled: 9, total: 81 };',
-  '  SD.Store.saveGame(SD.Store.loadGame() || {});',
+  '  SD.Sudoku.store.saveGame(SD.Sudoku.store.loadGame() || {});',
   "  document.querySelector('.home-item[data-go=daily]').click();",
   '})()',
 ].join('');
@@ -85,18 +85,18 @@ const SCENES = [
   { name: 'shot-calendar.png', w: 1400, h: 940, setup: DAILY_SEED },
   { name: 'shot-about.png', w: 1400, h: 940, setup: "document.querySelector('.home-item[data-go=about]').click();" },
   { name: 'shot-settings.png', w: 1400, h: 940, setup: "document.documentElement.setAttribute('data-theme','forest'); document.querySelector('.home-item[data-go=settings]').click();" },
-  { name: 'shot-game.png', w: 1400, h: 940, setup: WAIT_READY + "SD.App.showView('game');" },
-  { name: 'shot-learn.png', w: 1400, h: 940, setup: WAIT_READY + "SD.App.showView('game'); document.getElementById('btn-learn').click();" },
+  { name: 'shot-game.png', w: 1400, h: 940, setup: WAIT_READY + "SD.Sudoku.app.showView('game');" },
+  { name: 'shot-learn.png', w: 1400, h: 940, setup: WAIT_READY + "SD.Sudoku.app.showView('game'); document.getElementById('btn-learn').click();" },
   { name: 'shot-stats.png', w: 1400, h: 940, setup: "document.querySelector('.home-item[data-go=stats]').click();" },
-  { name: 'shot-hint.png', w: 1400, h: 940, setup: WAIT_READY + "SD.App.showView('game'); document.getElementById('btn-hint').click(); setTimeout(function(){ var r = document.querySelector('#hint-output .ref'); if (r) r.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })); }, 250);" },
-  { name: 'shot-note.png', w: 1400, h: 940, setup: WAIT_READY + "SD.App.showView('game'); var g = SD.App.getGame(); g.state.board.locked.fill(0); g.state.board.rebuildNotes(); g.setNoteMode(true); for (var k=0;k<81;k++){ if(g.state.board.notes[k]){ g.select(k); break; } } SD.App.render();" },
+  { name: 'shot-hint.png', w: 1400, h: 940, setup: WAIT_READY + "SD.Sudoku.app.showView('game'); document.getElementById('btn-hint').click(); setTimeout(function(){ var r = document.querySelector('#hint-output .ref'); if (r) r.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })); }, 250);" },
+  { name: 'shot-note.png', w: 1400, h: 940, setup: WAIT_READY + "SD.Sudoku.app.showView('game'); var g = SD.Sudoku.app.getGame(); g.state.board.locked.fill(0); g.state.board.rebuildNotes(); g.setNoteMode(true); for (var k=0;k<81;k++){ if(g.state.board.notes[k]){ g.select(k); break; } } SD.Sudoku.app.render();" },
   { name: 'shot-gacha.png', w: 1400, h: 940, setup: "document.querySelector('.home-item[data-go=gacha]').click();" },
   { name: 'shot-learn-page.png', w: 1400, h: 1000, setup: "document.querySelector('.home-item[data-go=learn]').click(); var h = document.querySelector('.tech-head'); if (h) h.click();" },
   { name: 'shot-learn-xwing.png', w: 1400, h: 1000, setup: "document.querySelector('.home-item[data-go=learn]').click(); var all = Array.from(document.querySelectorAll('.tech-head')); var h = all.filter(function(x){ return x.textContent.indexOf('四链列') >= 0; })[0] || all[0]; if (h) h.click(); setTimeout(function(){ document.querySelector('.demo-board').scrollIntoView({block:'center'}); }, 120);" },
   { name: 'shot-mine.png', w: 1400, h: 940, setup: "document.querySelector('.home-item[data-go=mine]').click();" },
   { name: 'shot-mobile.png', w: 390, h: 844, setup: '' },
-  { name: 'shot-mobile-hint.png', w: 390, h: 844, setup: WAIT_READY + "SD.App.showView('game'); document.getElementById('btn-hint').click();" },
-  { name: 'shot-mobile-game.png', w: 390, h: 844, setup: WAIT_READY + "SD.App.showView('game');" },
+  { name: 'shot-mobile-hint.png', w: 390, h: 844, setup: WAIT_READY + "SD.Sudoku.app.showView('game'); document.getElementById('btn-hint').click();" },
+  { name: 'shot-mobile-game.png', w: 390, h: 844, setup: WAIT_READY + "SD.Sudoku.app.showView('game');" },
 ];
 
 (async () => {

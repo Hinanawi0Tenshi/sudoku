@@ -1,45 +1,176 @@
-/* 数独 · 应用装配层
- * 把核心引擎、棋盘、控制器、面板连起来，并处理全局交互（快捷键、存档、胜利结算）。
+/* 数独 · 游戏装配
+ *
+ * 数独这一款游戏的完整定义：首页入口、对局页骨架、快捷键、结算、题库、每日挑战。
+ * 平台层只通过 SD.Registry 里注册的那份描述调用它；
+ * 这个文件里不出现「标题界面」「选游戏」之类的概念——那是壳的事。
+ *
+ * 对局页的骨架也从这里建，不再写死在 index.html 里：
+ * 扫雷的盘面跟 9×9 完全不是一回事，壳不该预设任何控件。
  */
 (function (global) {
   'use strict';
-
   const SD = global.SD;
+  SD.Sudoku = SD.Sudoku || {};   // 被单测单独加载时也要能自建命名空间
   const B = SD.Base;
   const U = SD.UI;
   const { $, $$, el, clear, toast, modal, confirm } = U;
+  const Store = SD.Sudoku.store;
 
   let game = null;
   let view = null;
   let openTech = null;
   let hintList = [];   // 当前盘面所有可用解法，按等级从低到高
-  let hintIndex = 0;  // 面板上正在看第几条
-  let autoSave = null;
+  let hintIndex = 0;   // 面板上正在看第几条
+  let mistakeAsked = false;
+  let dailyNoted = false;
+  // 会话令牌。出题是异步的，玩家可能在出题途中就退出去换游戏了；
+  // 回调里比一下令牌，就知道这局还该不该落地。
+  let session = 0;
+  // 后台备局的令牌。进游戏时会先在后台备一局，玩家要是抢先自己开了局，
+  // 那次备局晚一步落地就会把他刚选的题顶掉——所以任何一次明确开局都作废它。
+  let preparing = 0;
 
-  /* ---------------- 主题 ---------------- */
-  function applyTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
-    SD.Store.set('theme', theme);
+  let homeStatsNode = null;
+  let dailyDescNode = null;
+
+  /* 每个难度同时只留一局正在做的。玩家可以五档各开一局，但同一档不重复占位。 */
+  const QUEUE_KEEP = 1;
+
+  /**
+   * 一局通关值多少点数。按难度分档，每日挑战额外加成——
+   * 它是每天只有一次机会的题，值得比平时多给一点。
+   *
+   * 不因为用了提示或自动求解打折：这是练习工具，
+   * 用提示恰恰是它该被用的方式，扣分只会让人不敢点。
+   */
+  const WIN_POINTS = { easy: 5, medium: 10, hard: 20, expert: 35, master: 60 };
+  function pointsFor(meta) {
+    const base = WIN_POINTS[meta.difficulty] || 10;
+    return meta.dailyKey ? Math.round(base * 1.5) : base;
   }
 
+  /* ---------------- 首页 ---------------- */
+  const HOME_MENU = [
+    { id: 'play', label: '开始数独', desc: '按难度出一道新题', primary: true },
+    { id: 'bank', label: '题库', desc: '精选题目，也可以从照片存自己的' },
+    { id: 'daily', label: '每日挑战', desc: '同一天全世界同一道题' },
+    { id: 'mine', label: '我的', desc: '战绩纪录与卡牌图鉴' },
+    { id: 'learn', label: '技巧教学', desc: '每种技巧配一个演示棋盘' },
+  ];
 
-  /** 提示等级下拉的选项来自设置面板的同一份清单，避免两处各写一遍 */
-  function fillHintLevels(current) {
-    const sel = $('#hint-level');
-    sel.innerHTML = '';
-    for (const h of SD.Settings.HINT_LEVELS) {
-      const o = document.createElement('option');
-      o.value = String(h.value);
-      o.textContent = h.label;
-      sel.appendChild(o);
+  function buildHome(root) {
+    root.appendChild(el('div.home-logo', { text: '9' }));
+    root.appendChild(el('h1.home-title', { text: '数独' }));
+    root.appendChild(el('p.home-sub', { text: '会出题、会讲解、会从图片里读题' }));
+    const menu = el('nav.home-menu');
+    for (const item of HOME_MENU) {
+      const desc = el('span.hi-desc', { text: item.desc });
+      if (item.id === 'daily') dailyDescNode = desc;
+      menu.appendChild(el('button.home-item' + (item.primary ? '.home-item-primary' : ''), {
+        dataset: { go: item.id },
+        onclick: () => handleHome(item.id),
+      }, [el('span.hi-label', { text: item.label }), desc]));
     }
-    sel.value = String(current || 3);
+    root.appendChild(menu);
+    homeStatsNode = el('p.home-stats', { id: 'home-stats' });
+    root.appendChild(homeStatsNode);
+  }
+
+  /** 启动页的入口。设置和关于在标题页上，三款游戏共用一份，这里不再各放一个 */
+  function handleHome(go) {
+    if (go === 'play') { openNewGameDialog(); return; }
+    if (go === 'bank') { SD.Shell.openPage('题库', openBankPage); return; }
+    if (go === 'daily') { calMonth = null; SD.Shell.openPage('每日挑战', openDailyPage); return; }
+    if (go === 'mine') { openMinePage(); return; }
+    if (go === 'learn') { SD.Shell.openPage('技巧教学', (root) => SD.Sudoku.learn.renderLearn(root)); return; }
+  }
+
+  function renderHome() {
+    if (!homeStatsNode) return;
+    const st = Store.stats();
+    const d = Store.dailyStats();
+    const parts = [];
+    if (st.wins) parts.push('累计完成 ' + st.wins + ' 局');
+    parts.push(d.done ? '今日已完成' : '今日挑战待完成');
+    if (d.streak) parts.push('连续 ' + d.streak + ' 天');
+    homeStatsNode.textContent = parts.join(' · ');
+    if (dailyDescNode) {
+      dailyDescNode.textContent = d.done
+        ? '今天做完了（' + B.formatDuration(d.record.timeMs) + '），可以再来一局'
+        : '同一天全世界同一道题 · 连续 ' + d.streak + ' 天';
+    }
+  }
+
+  /* ---------------- 对局页骨架 ---------------- */
+  function buildPlay(root) {
+    const status = el('div.status-strip', { id: 'status-strip' }, [
+      el('div.stat', null, [
+        el('span.stat-label', { id: 'stat-difficulty-label', text: '难度' }),
+        el('b', { id: 'stat-difficulty', text: '—' }),
+      ]),
+      el('div.stat', null, [el('span.stat-label', { text: '用时' }), el('b.mono', { id: 'stat-timer', text: '00:00' })]),
+      el('div.stat', null, [el('span.stat-label', { text: '提示' }), el('b', { id: 'stat-hints', text: '0' })]),
+      el('div.stat', null, [el('span.stat-label', { text: '错误' }), el('b', { id: 'stat-mistakes', text: '0' })]),
+      el('div.stat', null, [el('span.stat-label', { text: '空格' }), el('b', { id: 'stat-empty', text: '0' })]),
+    ]);
+
+    root.appendChild(SD.Shell.topbar({
+      status: status,
+      actions: [
+        el('button.btn', { id: 'btn-undo', title: '撤销 (Ctrl+Z)', text: '撤销' }),
+        el('button.btn', { id: 'btn-redo', title: '重做 (Ctrl+Y)', text: '重做' }),
+      ],
+    }));
+
+    const pad = el('div.number-pad', { id: 'number-pad' });
+    for (let d = 1; d <= 9; d++) {
+      pad.appendChild(el('button.np-digit', { dataset: { digit: String(d) } }, el('span', { text: String(d) })));
+    }
+    pad.appendChild(el('button.np-erase', { dataset: { digit: '0' }, title: '擦除 (Delete / 空格)' }, '⌫'));
+
+    const tools = el('div.board-tools', null, [
+      el('button.btn', { id: 'btn-notes', title: '铅笔标记 (N)' }, [el('span.tool-ico', { text: '✎' }), ' 笔记']),
+      el('button.btn', { id: 'btn-hint', title: '提示 (H)' }, [el('span.tool-ico', { text: '💡' }), ' 提示']),
+      el('button.btn', { id: 'btn-check', title: '检查 (C)' }, [el('span.tool-ico', { text: '✓' }), ' 检查']),
+      el('button.btn', { id: 'btn-auto-notes', title: '按当前盘面重算所有铅笔标记', text: '一键笔记' }),
+      el('button.btn.btn-warn', { id: 'btn-solve' }, [el('span.tool-ico', { text: '⚡' }), ' 自动求解']),
+      el('button.btn', { id: 'btn-learn', title: '技巧教学' }, [el('span.tool-ico', { text: '📖' }), ' 技巧教学']),
+    ]);
+
+    const hintArea = el('aside.hint-area', { id: 'hint-area', hidden: true }, [
+      el('header.hint-head', null, [
+        el('b', { text: '提示' }),
+        el('div.hint-head-actions', null, [
+          el('label.field.field-inline', null, [
+            el('span', { text: '等级上限' }),
+            el('select', { id: 'hint-level' }),
+          ]),
+          el('button.btn.btn-icon', { id: 'btn-hint-close', title: '收起提示', text: '✕' }),
+        ]),
+      ]),
+      el('div.hint-output', { id: 'hint-output' }),
+      el('div.hint-actions', null, [
+        el('button.btn', { id: 'btn-hint-show', text: '只讲解' }),
+        el('button.btn.btn-primary', { id: 'btn-hint-apply', text: '讲解并执行' }),
+        el('button.btn', { id: 'btn-hint-auto', text: '自动做完' }),
+      ]),
+    ]);
+
+    root.appendChild(el('main.layout', null, [
+      el('section.board-area', null, [
+        el('div.board-wrap', null, el('div', { id: 'board-mount' })),
+        pad,
+        tools,
+      ]),
+      hintArea,
+    ]));
   }
 
   /* ---------------- 渲染 ---------------- */
   function render() {
+    if (!game || !view) return;
     const st = game.state;
-    const s = SD.Store.settings();
+    const s = Store.settings();
     view.render(st.board, {
       selected: st.selected,
       highlight: s.highlight,
@@ -60,10 +191,11 @@
     // 面板开着时跟着盘面重算解说。原先只在走提示按钮时才刷新，
     // 于是玩家自己填了一个数，讲解还停在上一步、结论指向已经填满的格子。
     // 关着面板时不重算，免得白白遍历一遍所有技巧。
-    if (!$('#hint-area').hidden) renderHintPanel();
+    if ($('#hint-area') && !$('#hint-area').hidden) renderHintPanel();
   }
 
   function renderStatus() {
+    if (!game) return;
     const st = game.state;
     const meta = st.meta || {};
     // 每日挑战把日期顶到状态栏第一格：标题写「每日挑战」已经够说明了，
@@ -79,6 +211,20 @@
     $('#stat-empty').textContent = String(empty);
   }
 
+  /** 提示等级下拉的选项来自设置面板的同一份清单，避免两处各写一遍 */
+  function fillHintLevels(current) {
+    const sel = $('#hint-level');
+    if (!sel) return;
+    sel.innerHTML = '';
+    for (const h of SD.Sudoku.settings.HINT_LEVELS) {
+      const o = document.createElement('option');
+      o.value = String(h.value);
+      o.textContent = h.label;
+      sel.appendChild(o);
+    }
+    sel.value = String(current || 3);
+  }
+
   /** 重算提示列表。盘面一变就必须重来，因为可用解法也跟着变 */
   function refreshHints() {
     const level = Number($('#hint-level').value) || 5;
@@ -89,7 +235,7 @@
   function renderHintPanel() {
     // 每次都重算：盘面随时会变，列表必须跟着变，否则面板上留的是过期的解法
     refreshHints();
-    SD.Panels.renderHint($('#hint-output'), { list: hintList, index: hintIndex });
+    SD.Sudoku.panels.renderHint($('#hint-output'), { list: hintList, index: hintIndex });
   }
 
   /** 切到某一条解法：只在盘面上预演高亮，不落子 */
@@ -100,10 +246,7 @@
     render();
     renderHintPanel();
   }
-  /** 设置面板的回调集合：两处调用共用，避免改了这里忘了另一处 */
-  function settingsCtx() {
-    return { rerender: render, applyTheme: applyTheme, fillHintLevels: fillHintLevels };
-  }
+
   function renderAllPanels() {
     renderHintPanel();
   }
@@ -115,8 +258,10 @@
    * 这样讲解和盘面能同时看见——讲解里写【R2C8】，抬头就能找到是哪一格。
    */
   function setHintOpen(open) {
+    const area = $('#hint-area');
+    if (!area) return;
     document.documentElement.style.setProperty('--sheet-top', measureSheetTop());
-    $('#hint-area').hidden = !open;
+    area.hidden = !open;
     document.querySelector('.layout').classList.toggle('is-split', open);
     if (open) renderHintPanel();
   }
@@ -138,7 +283,7 @@
     body.appendChild(el('div.learn-intro', { text: '当前局面可用的技巧排在最前。点任意一条，就在那一条下面展开演示盘面和讲解。' }));
     body.appendChild(library);
     const draw = () => {
-      SD.Panels.renderTechIndex(library, game.state.board.grid, openTech);
+      SD.Sudoku.panels.renderTechIndex(library, game.state.board.grid, openTech);
     };
     library.addEventListener('techpick', (e) => {
       openTech = e.detail;
@@ -148,15 +293,23 @@
     return modal({ title: '技巧教学', body, footer: [{ label: '关闭' }] });
   }
 
+  /* ---------------- 遮罩 ----------------
+   * 遮罩归壳管：全局只有一个，铺满整屏。
+   * 原先每个视图各一个，出题途中切视图就会收错节点、灰幕留在屏幕上点不掉。
+   */
+  const showOverlay = (title, sub) => SD.Shell.overlay(title, sub);
+  const hideOverlay = () => SD.Shell.hideOverlay();
+  const overlayProgress = (p) => SD.Shell.overlayProgress(p);
+
   /* ---------------- 对局启动 ---------------- */
   async function newGame(difficultyId, seed) {
     const cfg = SD.Generator.DIFFICULTY[difficultyId] || SD.Generator.DIFFICULTY.medium;
+    const my = session;
+    preparing++;   // 已经明确要开这一局了，后台那次备局作废
     showOverlay('正在出题…', '按目标难度挖洞并校验可解性，通常一两秒。');
     try {
-      const gen = await SD.Generator.generate(difficultyId, seed, (p) => {
-        const bar = overlayOf().querySelector('.progress i');
-        if (bar) bar.style.width = Math.round(p * 100) + '%';
-      });
+      const gen = await SD.Generator.generate(difficultyId, seed, overlayProgress);
+      if (my !== session) return;
       startWith(gen.givens, {
         difficulty: gen.difficulty,
         difficultyName: gen.difficultyName,
@@ -168,15 +321,11 @@
       }, gen.solution);
       hideOverlay();
     } catch (e) {
+      if (my !== session) return;
       hideOverlay();
       toast('出题失败：' + e.message, 'err');
     }
   }
-
-  /**
-   * @param {boolean} keepView 保持当前视图。冷启动会先在后台备好一局，
-   *   但玩家还站在首页，不能因为「备好了」就把他拽进游戏页。
-  let mistakeAsked = false;
 
   /**
    * 填错超过上限后的选择：再给一次机会，或者同难度直接换一局。
@@ -215,14 +364,16 @@
       ],
     });
   }
+
   /**
-   * 开一局。keepView 为真时留在当前视图，首页发起时用它避免把人拽走。
+   * 开一局。keepView 为真时留在当前视图，后台备局时用它避免把人拽走。
    */
   function startWith(givens, meta, solution, keepView) {
+    preparing++;
     game.start(givens, meta, solution);
     game.clearHint();
     // 入口可能从首页发起，不切视图就等于点了没反应
-    if (!keepView) showView('game');
+    if (!keepView) SD.Shell.showView('game');
     render();
     renderAllPanels();
     scheduleSave();
@@ -230,7 +381,7 @@
 
   const scheduleSave = U.debounce(() => {
     const st = game.state;
-    SD.Store.saveGame({
+    Store.saveGame({
       givens: B.gridToString(st.givens || st.board.givens),
       grid: B.gridToString(st.board.grid),
       notes: Array.from(st.board.notes),
@@ -241,43 +392,14 @@
       techniques: st.techniques,
       // 题面来源指纹。指纹由生成器自己算出——改了生成逻辑它就变，
       // 旧存档自动作废，不需要谁记得同步改版本号。
-      genStamp: SD.Store.generatorStamp(),
+      genStamp: Store.generatorStamp(),
     });
     if (st.meta.dailyKey && !st.won) {
       let filled = 0;
       for (let i = 0; i < 81; i++) if (st.board.grid[i]) filled++;
-      SD.Store.recordDailyProgress(st.meta.dailyKey, filled, 81);
+      Store.recordDailyProgress(st.meta.dailyKey, filled, 81);
     }
   }, 400);
-
-  /* ---------------- 遮罩 ---------------- */
-  // 遮罩要落在当前可见的那个视图上——从首页点「开始数独」时游戏页还没显示，
-  // 盖在隐藏的棋盘上等于什么都没发生。
-  const overlayOf = () => (document.documentElement.getAttribute('data-view') === 'home' ? $('#home-overlay') : $('#board-overlay'));
-
-  // 记下 show 时落在哪个节点上。出题是异步的，中间很可能已经切了视图，
-  // 收起时再按当前视图去找就会收错地方，遮罩就永远留在屏幕上。
-  let shownOverlay = null;
-
-  function showOverlay(title, sub) {
-    const ov = overlayOf();
-    shownOverlay = ov;
-    clear(ov);
-    ov.hidden = false;
-    ov.appendChild(el('div.ov-card', null, [
-      el('div.ov-title', { text: title }),
-      el('div.ov-sub', { text: sub || '' }),
-      el('div.progress', null, el('i')),
-    ]));
-  }
-
-  function hideOverlay() {
-    if (!shownOverlay) return;
-    shownOverlay.hidden = true;
-    clear(shownOverlay);
-    shownOverlay = null;
-  }
-
 
   /* ---------------- 新局对话框 ---------------- */
   const DIFF_DESC = {
@@ -312,8 +434,10 @@
   }
 
   function dailyChallenge(seed) {
+    const my = session;
     showOverlay('正在生成每日挑战…', '同一天全球拿到的是同一道题。');
     setTimeout(() => {
+      if (my !== session) return;
       // 等级在 L2~L3 之间按日期定，纯同步但比普通出题慢一些。
       // 放在 setTimeout 里是为了先让遮罩画出来，不然会像卡住不动。
       let gen = null;
@@ -337,99 +461,35 @@
     }, 30);
   }
 
-  /* ---------------- 视图切换 ---------------- */
-  const VIEWS = ['home', 'game', 'page'];
-
-  function showView(name) {
-    if (VIEWS.indexOf(name) < 0) name = 'home';
-    for (const v of VIEWS) {
-      const node = $('#view-' + v);
-      if (node) node.classList.toggle('is-active', v === name);
-    }
-    document.documentElement.setAttribute('data-view', name);
-    if (name === 'game') {
-      render();
-      renderAllPanels();
-    }
-    if (name === 'home') renderHome();
-    // 切视图时两个遮罩都收干净。遮罩是出题期间的临时状态，跟着视图走就会出岔子：
-    // 出题途中回首页，收起时按新视图去找就找错了节点，灰幕留在屏幕上点不掉。
-    hideOverlay();
-    for (const id of ['#home-overlay', '#board-overlay']) {
-      const ov = $(id);
-      if (ov) {
-        ov.hidden = true;
-        clear(ov);
-      }
-    }
-    window.scrollTo(0, 0);
-  }
-
-  /** 整页：设置 / 关于 / 题库共用一个壳，只有标题和内容不同 */
-  function openPage(title, render) {
-    $('#page-title').textContent = title;
-    const root = clear($('#page-root'));
-    render(root);
-    showView('page');
-  }
-
-
-  /** 「我的」页：战绩与图鉴都是自己的积累，合成一页用标签切换 */
+  /* ---------------- 「我的」页 ---------------- */
+  /** 战绩与图鉴都是自己的积累，合成一页用标签切换 */
   function openMinePage() {
-    let tab = 'stats';
-    $('#page-title').textContent = '我的';
-    const root = clear($('#page-root'));
-    const bar = el('div.tabbar');
-    const body = el('div.tab-body');
-    const tabs = [
-      { id: 'stats', label: '战绩', render: (r) => SD.Data.renderData(r, { game: game, applyImported: applyImported }) },
-      { id: 'cards', label: '图鉴', render: (r) => SD.Gacha.renderLibrary(r) },
-    ];
-    const draw = () => {
-      clear(bar);
-      for (const t of tabs) {
-        bar.appendChild(el('button.tab' + (tab === t.id ? '.is-on' : ''), {
-          text: t.label,
-          onclick: () => { tab = t.id; draw(); },
-        }));
-      }
-      clear(body);
-      tabs.find((t) => t.id === tab).render(body);
-    };
-    draw();
-    root.appendChild(bar);
-    root.appendChild(body);
-    showView('page');
-  }
-
-  /** 启动页的入口。游戏页里没有这些按钮，所以这里是唯一的导航 */
-  function handleHome(go) {
-    if (go === 'play') { openNewGameDialog(); return; }
-    if (go === 'bank') { openPage('题库', openBankPage); return; }
-    if (go === 'daily') { calMonth = null; openPage('每日挑战', openDailyPage); return; }
-    if (go === 'mine') { openMinePage(); return; }
-    if (go === 'learn') { openPage('技巧教学', (root) => SD.Learn.renderLearn(root)); return; }
-    if (go === 'settings') { openPage('设置', (root) => SD.Settings.renderSettings(root, settingsCtx())); return; }
-    if (go === 'about') { openPage('关于', openAboutPage); return; }
-  }
-  /* ---------------- 启动页 ---------------- */
-  function renderHome() {
-    const st = SD.Store.stats();
-    const d = SD.Store.dailyStats();
-    const parts = [];
-    if (st.wins) parts.push('累计完成 ' + st.wins + ' 局');
-    parts.push(d.done ? '今日已完成' : '今日挑战待完成');
-    if (d.streak) parts.push('连续 ' + d.streak + ' 天');
-    $('#home-stats').textContent = parts.join(' · ');
-    $('#home-daily-desc').textContent = d.done
-      ? '今天做完了（' + B.formatDuration(d.record.timeMs) + '），可以再来一局'
-      : '同一天全世界同一道题 · 连续 ' + d.streak + ' 天';
+    SD.Shell.openPage('我的', (root) => {
+      let tab = 'stats';
+      const bar = el('div.tabbar');
+      const body = el('div.tab-body');
+      const tabs = [
+        { id: 'stats', label: '战绩', render: (r) => SD.Sudoku.data.renderData(r, { game: game, applyImported: applyImported }) },
+        { id: 'cards', label: '图鉴', render: (r) => SD.Sudoku.gacha.renderLibrary(r) },
+      ];
+      const draw = () => {
+        clear(bar);
+        for (const t of tabs) {
+          bar.appendChild(el('button.tab' + (tab === t.id ? '.is-on' : ''), {
+            text: t.label,
+            onclick: () => { tab = t.id; draw(); },
+          }));
+        }
+        clear(body);
+        tabs.find((t) => t.id === tab).render(body);
+      };
+      draw();
+      root.appendChild(bar);
+      root.appendChild(body);
+    });
   }
 
   /* ---------------- 题库页 ---------------- */
-  /** 每档自动攒几道待做题，做完一道补一道 */
-  // 每个难度同时只留一局正在做的。玩家可以五档各开一局，但同一档不重复占位。
-  const QUEUE_KEEP = 1;
   /**
    * 补位出题。已经出现在待做队列、玩家自己题库、每日挑战里的题面一律跳过——
    * 用题面字符串做指纹，比按标题去重可靠得多。
@@ -443,8 +503,8 @@
       const g = SD.Generator.generateSync(diff, null);
       return { grid: B.gridToString(g.givens), clues: g.clueCount, level: g.level };
     };
-    SD.Store.refillQueue(diff, QUEUE_KEEP, gen);
-    return SD.Store.queueOf(diff).length;
+    Store.refillQueue(diff, QUEUE_KEEP, gen);
+    return Store.queueOf(diff).length;
   }
 
   /**
@@ -452,13 +512,12 @@
    * 只在开题库页时算一次：放在每次补位里会反复重算每日挑战，
    * 大师档一秒一道，补五档位要多等好几秒。
    */
-  let dailyNoted = false;
   function noteDailyGrid() {
     if (dailyNoted) return;
     dailyNoted = true;
     try {
       const g = SD.Generator.generateDailySync(SD.Generator.dailySeed());
-      SD.Store.noteGridUsed(B.gridToString(g.givens));
+      Store.noteGridUsed(B.gridToString(g.givens));
     } catch (e) {
       // 记指纹只是去重优化，出不来也不该拦住玩家做题
     }
@@ -475,6 +534,7 @@
   }
 
   function openBankPage(root) {
+    noteDailyGrid();
     root.appendChild(el('p.lead', { text: '题目都由本机现出：做过的自动存进「我的题库」，也可以从照片把题读进来。' }));
     root.appendChild(el('h3.sec-title', { text: '从图片添加' }));
     const ocrBox = el('div.ocr-box');
@@ -489,11 +549,11 @@
     const mine = el('div.bank-list');
     root.appendChild(mine);
 
-    SD.OCR.mount(ocrBox, {
+    SD.Sudoku.ocr.mount(ocrBox, {
       applyImported: applyImported,
       onSave: (grid, report) => {
         const n = mine.querySelectorAll('.bank-item').length + 1;
-        SD.Store.addUserPuzzle(grid, '我的题目 ' + n, report.classification.name);
+        Store.addUserPuzzle(grid, '我的题目 ' + n, report.classification.name);
         drawMine();
         toast('已存进我的题库', 'ok');
       },
@@ -513,8 +573,8 @@
     }
 
     function drawMine() {
-      U.clear(mine);
-      const saved = SD.Store.userBank();
+      clear(mine);
+      const saved = Store.userBank();
       if (!saved.length) {
         mine.appendChild(el('p.lead', { text: '做完的题会自动留在这里，想重做随时点开。' }));
         return;
@@ -533,68 +593,70 @@
               el('button.btn.btn-primary', { text: '开始', onclick: () => playUserPuzzle(p) }),
               el('button.btn', {
                 text: '删除',
-                onclick: () => { SD.Store.removeUserPuzzle(p.id); drawMine(); },
+                onclick: () => { Store.removeUserPuzzle(p.id); drawMine(); },
               }),
             ]),
           ])
         );
       }
     }
-    drawMine();
-    drawQueue();
 
     /**
      * 正在做的局。只列真正开过的那几档——五档各能留一局，
      * 但没必要把没开过的档也摆出来占地方。新建一局才往这里加一条。
      */
     function drawQueue() {
-      U.clear(queueBox);
+      clear(queueBox);
       let any = false;
       for (const diff of SD.Generator.DIFFICULTY_ORDER) {
         const cfg = SD.Generator.DIFFICULTY[diff];
-        const items = SD.Store.queueOf(diff);
+        const items = Store.queueOf(diff);
         if (!items.length) continue;
         any = true;
         const item = items[0];
-        const line = el('div.bank-item.is-queue', null, [
-          el('div.bi-main', null, [
-            el('b.bi-name', { text: cfg.name }),
-            el('span.bi-band', { text: item.clues + ' 个线索 · 在做' }),
-          ]),
-          el('div.bi-row', null, [
-            el('button.btn.btn-primary', { text: '继续', onclick: () => playQueueItem(item) }),
-            el('button.btn', {
-              text: '换一题',
-              onclick: () => {
-                SD.Store.removeQueueItem(item.id);
-                refillQueue(diff);
-                drawQueue();
-              },
-            }),
-          ]),
-        ]);
-        queueBox.appendChild(line);
+        queueBox.appendChild(
+          el('div.bank-item.is-queue', null, [
+            el('div.bi-main', null, [
+              el('b.bi-name', { text: cfg.name }),
+              el('span.bi-band', { text: item.clues + ' 个线索 · 在做' }),
+            ]),
+            el('div.bi-row', null, [
+              el('button.btn.btn-primary', { text: '继续', onclick: () => playQueueItem(item) }),
+              el('button.btn', {
+                text: '换一题',
+                onclick: () => {
+                  Store.removeQueueItem(item.id);
+                  refillQueue(diff);
+                  drawQueue();
+                },
+              }),
+            ]),
+          ])
+        );
       }
       if (!any) {
         queueBox.appendChild(el('p.lead', { text: '还没有正在做的局。上面开一局，或回到首页按难度出题。' }));
       }
     }
+    drawMine();
+    drawQueue();
   }
 
   function playUserPuzzle(p) {
     if (applyImported(p.grid, null, { source: '我的题库' })) {
       game.state.meta.title = p.name;
       render();
-      showView('game');
+      SD.Shell.showView('game');
     }
   }
+
   /* ---------------- 每日挑战日历 ---------------- */
   let calMonth = null;   // null 表示跟随当前月
 
   const monthKey = (d) => d.getFullYear() + '-' + B.pad2(d.getMonth() + 1);
 
   function openDailyPage(root) {
-    const stats = SD.Store.dailyStats();
+    const stats = Store.dailyStats();
 
     const summary = el('div.daily-stats');
     const add = (label, value, hint) =>
@@ -616,13 +678,13 @@
       el('button.btn.btn-icon', {
         text: '‹',
         title: '上个月',
-        onclick: () => { calMonth = shiftMonth(cursor, -1); openPage('每日挑战', openDailyPage); },
+        onclick: () => { calMonth = shiftMonth(cursor, -1); SD.Shell.openPage('每日挑战', openDailyPage); },
       }),
       el('b.cal-title', { text: cursor.getFullYear() + ' 年 ' + (cursor.getMonth() + 1) + ' 月' }),
       el('button.btn.btn-icon', {
         text: '›',
         title: '下个月',
-        onclick: () => { calMonth = shiftMonth(cursor, 1); openPage('每日挑战', openDailyPage); },
+        onclick: () => { calMonth = shiftMonth(cursor, 1); SD.Shell.openPage('每日挑战', openDailyPage); },
       }),
     ]);
     root.appendChild(head);
@@ -641,7 +703,7 @@
     }
     const tail = (7 - ((lead + days) % 7)) % 7;
     for (let i = 1; i <= tail; i++) {
-      grid.appendChild(calCell(new Date(cursor.getFullYear(), cursor.getMonth() + days + i), today));
+      grid.appendChild(calCell(new Date(cursor.getFullYear(), cursor.getMonth(), days + i), today));
     }
     root.appendChild(grid);
 
@@ -659,10 +721,11 @@
   function shiftMonth(d, delta) {
     return monthKey(new Date(d.getFullYear(), d.getMonth() + delta, 1));
   }
+
   /** 一天一格：完成了盖奖杯，做了一半画进度环，没碰过就干干净净 */
   function calCell(d, today) {
     const key = SD.Generator.dailySeed(d);
-    const rec = SD.Store.stats().daily[key];
+    const rec = Store.stats().daily[key];
     const won = !!(rec && rec.won);
     const filled = rec ? rec.filled || 0 : 0;
     const total = rec && rec.total ? rec.total : 81;
@@ -677,7 +740,7 @@
     if (won) cls += '.is-won';
     if (future) cls += '.is-future';
 
-    const cell = el(cls, {
+    return el(cls, {
       style: ratio > 0
         ? { '--p': Math.round(ratio * 100) + '%', background: 'color-mix(in srgb, var(--accent) ' + Math.round(ratio * 22) + '%, var(--surface))' }
         : null,
@@ -687,76 +750,13 @@
       el('span.cal-num', { text: String(d.getDate()) }),
       won ? el('span.cal-trophy', { text: '🏆' }) : null,
     ]);
-    return cell;
   }
 
-  /* ---------------- 关于页 ---------------- */
-  const ABOUT = [
-    {
-      h: '这是什么',
-      p: [
-        '一个纯前端的数独游戏。没有账号、没有服务器、没有埋点，所有数据只存在你自己的浏览器里。',
-        '双击 index.html 就能玩；图片识别要用 Web Worker 读本地文件，受浏览器同源策略限制，需要用启动脚本起一个本地服务。',
-      ],
-    },
-    {
-      h: '出题不是随机的',
-      p: [
-        '随机出一道满盘，再逐个挖空。每挖掉一格都检查两件事：解还唯一吗？人类技巧还推得动吗？',
-        '两条都满足才留下，所以不会出现「只能靠瞎猜」的题。难度按「人类最少需要用到哪一级技巧」评，不按线索个数猜。',
-      ],
-    },
-    {
-      h: '提示是真推理，不是报答案',
-      p: [
-        '收录 ' + SD.Techniques.LIST.length + ' 种人类解题技巧，从唯一余数一直到链式推理（反证法）。每种技巧都配了一个当场能触发的演示棋盘，对着图看比读文字快。',
-        '面板会把此刻能用的解法一次列全并按等级排序，你可以自己挑下一步走哪条路，而不是只能按顺序接受。',
-        '讲解里的坐标写成【R6C6】这种可点样式，鼠标停上去（或手机上长按）会在棋盘上把那一格点亮。',
-      ],
-    },
-    {
-      h: '图片识别的真实水平',
-      p: [
-        '流程是：局部对比度找暗线 → 连通域滤噪 → 凸包取最优四边形 → 单应变换校正透视 → 重新量一次网格线 → 逐格切图识别。',
-        '干净扫描件实测 32/32 全对。手机翻拍的实物照片只能到三成左右，剩下的格子一律标黄等你确认。',
-        '这是刻意的设计：低置信度的格子不会悄悄塞进棋盘。宁可让你多看一眼，也不要往盘里放错数字。导入前还会体检题面，重复数字和多解的题会被拦下来。',
-      ],
-    },
-    {
-      h: '技术上的取舍',
-      p: [
-        '没有构建工具，没有 npm 依赖，全部是普通 script 标签——为的是双击就能玩、交付物自包含。',
-        '候选数用 9 位掩码存，判断「某格能不能放 d」是一次位运算。OCR 引擎完全本地化，断网也能用。',
-      ],
-    },
-    {
-      h: '已知不足',
-      p: [
-        '难度评级偏保守，实测多数题落在 L1–L2，「困难」和「大师」的实际达成率不如预期。',
-        '照片场景的网格复检在 JPEG 重压缩叠加透视重采样之后仍有残差。统计只存在本机，换设备不会同步。',
-      ],
-    },
-  ];
-
-  function openAboutPage(root) {
-    for (const sec of ABOUT) {
-      const card = el('div.card.about-card', null, el('h3', { text: sec.h }));
-      for (const line of sec.p) card.appendChild(el('p', { text: line }));
-      root.appendChild(card);
-    }
-    // 把版本号摆出来：发布出问题时要能一眼分清
-    // 「发上去了但用户还在看旧缓存」和「压根没发上去」。
-    root.appendChild(
-      el('p.foot-note', { text: '版本 ' + (window.SD_BUILD || '本地开发版') + ' · ' + SD.Techniques.LIST.length + ' 种技巧' })
-    );
-    root.appendChild(
-    el('p.foot-note', { text: '快捷键：Esc 回首页 · M 笔记 · H 提示 · C 检查 · D 每日挑战 · Ctrl+Z 撤销 · Ctrl+Y 重做' })
-    );
-  }
+  /* ---------------- 题面导入 ---------------- */
   function applyImported(text, json, extra) {
     const g = B.stringToGrid(text);
     const report = SD.Generator.inspect(g);
-    const dlg = modal({
+    modal({
       title: report.valid ? '题面体检通过' : '题面体检未通过',
       body: [
         el('div.notice.' + (report.valid ? 'notice-ok' : 'notice-err'), { text: report.reason }),
@@ -795,7 +795,7 @@
   function onWin() {
     const st = game.state;
     const timeMs = game.elapsedMs();
-    SD.Store.recordGame({
+    Store.recordGame({
       won: true,
       timeMs: timeMs,
       hints: st.hints,
@@ -810,11 +810,18 @@
     // 待做队列：做完一道立刻补一道，玩家手上永远有 QUEUE_KEEP 道可打。
     // 出题是同步的，最多一两秒，这里已经过了结算弹窗的时机。
     if (st.meta.queueId) {
-      SD.Store.finishQueueItem(st.meta.queueId);
+      Store.finishQueueItem(st.meta.queueId);
       refillQueue(st.meta.difficulty);
     }
     render();
     renderAllPanels();
+    renderHome();
+
+    const pts = SD.Points.awardWin('sudoku', {
+      difficulty: st.meta.difficulty || 'custom',
+      difficultyName: st.meta.difficultyName,
+      dailyKey: st.meta.dailyKey,
+    });
 
     const used = {};
     for (const id of st.techniques) used[id] = (used[id] || 0) + 1;
@@ -832,24 +839,23 @@
           el('div.result-tile', null, [el('div.rt-val', { text: B.formatDuration(timeMs) }), el('div.rt-label', { text: '用时' })]),
           el('div.result-tile', null, [el('div.rt-val', { text: String(st.hints) }), el('div.rt-label', { text: '提示' })]),
           el('div.result-tile', null, [el('div.rt-val', { text: String(st.mistakes) }), el('div.rt-label', { text: '错误' })]),
-          el('div.result-tile', null, [el('div.rt-val', { text: String(game.conflicts().size) }), el('div.result-label', { text: '冲突' })]),
+          el('div.result-tile', null, [el('div.rt-val', { text: String(game.conflicts().size) }), el('div.rt-label', { text: '冲突' })]),
         ]),
+        pts ? el('p.points-gain', { text: '+' + pts + ' 通关点数，累计 ' + SD.Points.total() }) : null,
         el('div.card', { style: { marginTop: '14px' } }, [el('h3', { text: '你用到的技巧' }), rows.length ? rows : el('p', { text: '全程自己推，没有用提示——这局是纯实力。' })]),
       ],
       footer: [
         { label: '看看复盘', onClick: openLearnModal },
-        { label: '再来一局', primary: true, onClick: () => newGame(SD.Store.settings().lastDifficulty) },
+        { label: '再来一局', primary: true, onClick: () => newGame(Store.settings().lastDifficulty) },
       ],
     });
   }
 
-
-  SD.App = { getGame: () => game, render: render, applyImported: applyImported, newGame: newGame, loadImported: loadImported, showView: showView, openPage: openPage, startWith: startWith, setHintOpen: setHintOpen };
-
-  /* ---------------- 事件接线与启动 ---------------- */
+  /* ---------------- 事件 ---------------- */
   /** 讲解里的【R2C6】指到哪一格，棋盘就点亮哪一格；触屏没有 hover，用长按代替 */
-  function bindCellRefs() {
+  function bindHintRefs() {
     const out = $('#hint-output');
+    if (!out) return;
     const of = (e) => {
       const node = e.target.closest ? e.target.closest('.ref') : null;
       return node ? [Number(node.dataset.cell)] : [];
@@ -870,18 +876,29 @@
     out.addEventListener('touchend', end, { passive: true });
     out.addEventListener('touchcancel', end, { passive: true });
   }
-  function bindEvents() {
+
+  let docBound = false;
+  /** 文档级监听只绑一次。每次进游戏都绑的话，切几次游戏就会重复触发几遍。 */
+  function bindDocument() {
+    if (docBound) return;
+    docBound = true;
+    document.addEventListener('hintpick', (e) => selectHint(e.detail));
+    document.addEventListener('keydown', onKeyDown);
+    window.addEventListener('resize', U.debounce(() => {
+      if (SD.Shell.game() !== def || SD.Shell.viewName() !== 'game') return;
+      if (document.documentElement.getAttribute('data-tab') === 'image') SD.Sudoku.ocr.drawStage();
+      // 面板顶边是量出来的，转屏或改窗口后要重新贴一次
+      const area = $('#hint-area');
+      if (area && !area.hidden) setHintOpen(true);
+    }, 200));
+  }
+
+  /** 对局页的按钮每次进游戏都要重绑：DOM 是刚建的，旧节点已经扔掉了 */
+  function bindPlay() {
     $('#btn-undo').addEventListener('click', () => { game.undo(); render(); scheduleSave(); });
     $('#btn-redo').addEventListener('click', () => { game.redo(); render(); scheduleSave(); });
-    $('#btn-home').addEventListener('click', () => showView('home'));
-    $('#btn-home-back').addEventListener('click', () => showView('home'));
-    U.$$('.home-item').forEach((b) => b.addEventListener('click', () => handleHome(b.dataset.go)));
-    $('#page-back').addEventListener('click', () => showView('home'));
     $('#btn-notes').addEventListener('click', () => { game.setNoteMode(); render(); });
-    $('#btn-hint').addEventListener('click', () => {
-      setHintOpen(true);
-      doHint(false);
-    });
+    $('#btn-hint').addEventListener('click', () => { setHintOpen(true); doHint(false); });
     $('#btn-hint-close').addEventListener('click', () => setHintOpen(false));
     $('#btn-learn').addEventListener('click', openLearnModal);
     $('#btn-check').addEventListener('click', checkBoard);
@@ -899,13 +916,13 @@
     $('#btn-hint-auto').addEventListener('click', autoSolve);
 
     $('#hint-level').addEventListener('change', (e) => {
-      SD.Store.set('defaultHintLevel', Number(e.target.value));
+      Store.set('defaultHintLevel', Number(e.target.value));
       hintIndex = 0;
       refreshHints();
       renderHintPanel();
     });
 
-    U.$$('.np-digit, .np-erase').forEach((btn) => {
+    $$('.np-digit, .np-erase').forEach((btn) => {
       btn.addEventListener('click', () => {
         const d = Number(btn.dataset.digit);
         if (d === 0) game.erase();
@@ -915,18 +932,7 @@
       });
     });
 
-    // 提示区里点选某一条解法（只预演，不落子）
-    document.addEventListener('hintpick', (e) => selectHint(e.detail));
-
-    document.addEventListener('keydown', onKeyDown);
-
-    window.addEventListener('resize', U.debounce(() => {
-      if (document.documentElement.getAttribute('data-tab') === 'image') SD.OCR.drawStage();
-      // 面板顶边是量出来的，转屏或改窗口后要重新贴一次
-      if (!$('#hint-area').hidden) setHintOpen(true);
-    }, 200));
-
-    window.addEventListener('beforeunload', () => SD.Store.flush());
+    bindHintRefs();
   }
 
   /** 只讲解 / 讲解并执行：都作用于面板上当前选中的那一条解法 */
@@ -987,7 +993,7 @@
       if (err) toast(err, 'err', 3600);
       else toast(n ? '已用人类技巧推完 ' + n + ' 步' : '已填满棋盘', 'ok');
     };
-    if (SD.Store.settings().confirmSolve) {
+    if (Store.settings().confirmSolve) {
       confirm('自动求解', '会用人类技巧一步步把棋盘推完，无法推进时改用机器解。会记为一次提示。确定继续？', '求解').then((ok) => {
         if (ok) run();
       });
@@ -997,12 +1003,9 @@
   }
 
   function onKeyDown(e) {
-    // 弹窗开着时 Esc 归弹窗管，否则关掉弹窗的同时还会把当前视图切走
-    if (e.key === 'Escape' && !document.querySelector('#dialog-root .modal')) {
-      e.preventDefault();
-      showView('home');
-      return;
-    }
+    // 只有真的在对局页上才吃键。否则在标题页敲 m 会去切笔记模式，
+    // 在别的游戏里敲数字会往数独盘里塞数字。
+    if (SD.Shell.game() !== def || SD.Shell.viewName() !== 'game') return;
     if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
     const st = game.state;
     const mod = e.ctrlKey || e.metaKey;
@@ -1044,7 +1047,7 @@
       case 'D':
         e.preventDefault();
         calMonth = null;
-        openPage('每日挑战', openDailyPage);
+        SD.Shell.openPage('每日挑战', openDailyPage);
         break;
       case 'm':
       case 'M':
@@ -1082,37 +1085,68 @@
     }
   }
 
-  /* ---------------- 启动 ---------------- */
-  function boot() {
-    const s = SD.Store.settings();
-    applyTheme(s.theme);
-    fillHintLevels(s.defaultHintLevel);
+  /* ---------------- 进入 / 离开 ---------------- */
+  /** 后台备一局。玩家可能还站在首页，不能因为「备好了」就把他拽进对局页。 */
+  function prepareBackground() {
+    const my = session;
+    const token = ++preparing;
+    SD.Generator.generate(Store.settings().lastDifficulty || 'medium', null, () => {}).then((gen) => {
+      if (my !== session || token !== preparing) return;
+      startWith(gen.givens, {
+        difficulty: gen.difficulty,
+        difficultyName: gen.difficultyName,
+        rating: gen.rating,
+        clueCount: gen.clueCount,
+        level: gen.level,
+        title: gen.difficultyName + ' · ' + gen.clueCount + ' 个线索',
+      }, gen.solution, true);
+    }, (e) => {
+      if (my !== session || token !== preparing) return;
+      toast('开局出题失败：' + e.message, 'err');
+    });
+  }
 
+  function mount(nodes) {
+    session++;
+    buildHome(nodes.home);
+    buildPlay(nodes.play);
+    bindPlay();
+    bindDocument();
+    fillHintLevels(Store.settings().defaultHintLevel);
+
+    // 棋盘渲染器和控制器各建一次。控制器持有对局状态，重新进游戏时要保住；
+    // 渲染器只是往刚建的 DOM 上画，必须重建。
     view = SD.BoardView.create($('#board-mount'), {
-      onSelect: (i) => {
-        game.select(i);
-        render();
-      },
+      onSelect: (i) => { game.select(i); render(); },
     });
+    if (!game) {
+      game = SD.Sudoku.game.create({
+        onChange: (kind) => {
+          if (kind === 'win') onWin();
+          else if (kind === 'mistakeLimit') askAfterMistakes();
+          else if (kind === 'tick') renderStatus();
+          // 落子、选择、撤销重做都要重绘：红字标记、冲突高亮都挂在盘面元素上，
+          // 不重绘的话红标不会出现
+          else render();
+        },
+        onTick: () => renderStatus(),
+      });
+    }
 
-    game = SD.Game.create({
-      onChange: (kind) => {
-        if (kind === 'win') onWin();
-        else if (kind === 'mistakeLimit') askAfterMistakes();
-        else if (kind === 'tick') renderStatus();
-        // 落子、选择、撤销重做都要重绘：红字标记、冲突高亮都挂在盘面元素上，
-        // 不重绘的话红标不会出现
-        else render();
-      },
-      onTick: () => renderStatus(),
-    });
-
-    bindEvents();
-    bindCellRefs();
-    document.documentElement.setAttribute('data-tab', 'hint');
+    renderHome();
+    render();
     renderAllPanels();
+    restoreOrPrepare();
+  }
 
-    const saved = SD.Store.loadGame();
+  /**
+   * 恢复上次的对局；手上已经有局就不再读存档。
+   * 不能每次都读：离开游戏再回来会整块重新挂载，此时若拿存档覆盖内存里的对局，
+   * 撤销栈和计时都会平白丢掉——玩家只是去设置页转了一圈。
+   */
+  function restoreOrPrepare() {
+    if (game.state.givens) { render(); return; }
+    const saved = Store.loadGame();
     if (saved && saved.givens) {
       const g = B.stringToGrid(saved.givens);
       const report = SD.Generator.inspect(g);
@@ -1125,30 +1159,103 @@
         game.state.elapsed = saved.elapsed || 0;
         game.pauseTimer();
         toast('已恢复上次的对局');
+        render();
+        return;
       }
     }
-    if (!game.state.givens) {
-      SD.Generator.generate(s.lastDifficulty || 'medium', null, () => {}).then((gen) => {
-        startWith(gen.givens, {
-          difficulty: gen.difficulty,
-          difficultyName: gen.difficultyName,
-          rating: gen.rating,
-          clueCount: gen.clueCount,
-          level: gen.level,
-          title: gen.difficultyName + ' · ' + gen.clueCount + ' 个线索',
-        }, gen.solution, true);
-      }, (e) => {
-        showView('home');
-        toast('开局出题失败：' + e.message, 'err');
-      });
-    } else {
-      render();
-    }
-
-    // 冷启动先落在首页；有未完成的旧局也由玩家自己决定要不要回去接着下
-    showView('home');
+    if (!game.state.givens) prepareBackground();
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
-  else boot();
+  function unmount() {
+    // 令牌一变，还在路上的出题结果就会被丢掉，不会落到已经拆掉的页面上
+    session++;
+    if (game) game.pauseTimer();
+    Store.flush();
+  }
+
+  /** 回到对局页时重画一次：在设置里改过高亮开关，盘面得跟着变 */
+  function onShow() {
+    renderHome();
+    render();
+    renderStatus();
+  }
+
+  /* ---------------- 游戏定义 ---------------- */
+  const ABOUT = [
+    {
+      h: '出题不是随机的',
+      p: [
+        '随机出一道满盘，再逐个挖空。每挖掉一格都检查两件事：解还唯一吗？人类技巧还推得动吗？',
+        '两条都满足才留下，所以不会出现「只能靠瞎猜」的题。难度按「人类最少需要用到哪一级技巧」评，不按线索个数猜。',
+      ],
+    },
+    {
+      h: '提示是真推理，不是报答案',
+      p: [
+        '收录 ' + SD.Techniques.LIST.length + ' 种人类解题技巧，从唯一余数一直到链式推理（反证法）。每种技巧都配了一个当场能触发的演示棋盘，对着图看比读文字快。',
+        '面板会把此刻能用的解法一次列全并按等级排序，你可以自己挑下一步走哪条路，而不是只能按顺序接受。',
+        '讲解里的坐标写成【R6C6】这种可点样式，鼠标停上去（或手机上长按）会在棋盘上把那一格点亮。',
+      ],
+    },
+    {
+      h: '图片识别的真实水平',
+      p: [
+        '流程是：局部对比度找暗线 → 连通域滤噪 → 凸包取最优四边形 → 单应变换校正透视 → 重新量一次网格线 → 逐格切图识别。',
+        '干净扫描件实测 32/32 全对。手机翻拍的实物照片只能到三成左右，剩下的格子一律标黄等你确认。',
+        '这是刻意的设计：低置信度的格子不会悄悄塞进棋盘。宁可让你多看一眼，也不要往盘里放错数字。导入前还会体检题面，重复数字和多解的题会被拦下来。',
+        '拍不了平整的照片时，题库页有「手动填题」——照着一张模糊的图把数字敲进去，比对着图在纸上重抄一遍快。',
+      ],
+    },
+    {
+      h: '技术上的取舍',
+      p: [
+        '没有构建工具，没有 npm 依赖，全部是普通 script 标签——为的是双击就能玩、交付物自包含。',
+        '候选数用 9 位掩码存，判断「某格能不能放 d」是一次位运算。OCR 引擎完全本地化，断网也能用。',
+      ],
+    },
+    {
+      h: '已知不足',
+      p: [
+        '难度评级偏保守，实测多数题落在 L1–L2，「困难」和「大师」的实际达成率不如预期。',
+        '照片场景的网格复检在 JPEG 重压缩叠加透视重采样之后仍有残差。统计只存在本机，换设备不会同步。',
+      ],
+    },
+  ];
+
+  const def = {
+    id: 'sudoku',
+    name: '数独',
+    tagline: '会出题、会讲解、会从图片里读题',
+    icon: '9',
+    brandSub: 'Sudoku Studio',
+    accent: '#2f6fed',
+    ready: true,
+    mount: mount,
+    unmount: unmount,
+    onShow: onShow,
+    statusLine: function () {
+      const d = Store.dailyStats();
+      if (!d.done) return '今日挑战待完成';
+      const st = Store.stats();
+      return st.wins ? '累计 ' + st.wins + ' 局' : null;
+    },
+    settings: (root, ctx) => SD.Sudoku.settings.render(root, ctx),
+    resetSettings: () => Store.resetSettings(),
+    about: ABOUT,
+    points: pointsFor,
+  };
+  SD.Registry.register(def);
+
+  SD.Sudoku.app = {
+    getGame: () => game,
+    render: render,
+    renderHome: renderHome,
+    applyImported: applyImported,
+    newGame: newGame,
+    loadImported: loadImported,
+    showView: SD.Shell.showView,
+    openPage: SD.Shell.openPage,
+    startWith: startWith,
+    setHintOpen: setHintOpen,
+  };
 })(window);

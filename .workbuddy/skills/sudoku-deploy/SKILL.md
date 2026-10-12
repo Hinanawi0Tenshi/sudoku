@@ -88,7 +88,7 @@ node tests/verify-live.js
 所以脚本报不一致才是真的不一致。手工 curl 核对时也必须带时间戳：
 
 ```bash
-curl -L "https://sudoku-studio.app.workbuddy.host/js/ui/14-panels.js?t=$(date +%s)"
+curl -L "https://sudoku-studio.app.workbuddy.host/js/games/sudoku/03-panels.js?t=$(date +%s)"
 ```
 
 不带的后果就是：刚发完立刻 curl，拿回来的是旧文件，看着像发布失败，白折腾一轮。
@@ -132,7 +132,7 @@ curl -L "https://sudoku-studio.app.workbuddy.host/js/ui/14-panels.js?t=$(date +%
 
 ## 五、其他别踩的坑
 
-- **`VENDOR` 必须保持相对路径，站点必须部署在根路径。** `js/ui/18-ocr.js` 里
+- **`VENDOR` 必须保持相对路径，站点必须部署在根路径。** `js/games/sudoku/07-ocr.js` 里
   `const VENDOR = 'js/vendor/'`，挪到子目录会 404，图片识别直接废掉。
 - **别删 `js/vendor/tesseract/` 里的 4 个 core 文件。** Tesseract 运行时按浏览器的 SIMD
   支持情况自己挑一个，看着"只用到一个"也不能删。整站 32M 里这 4 个占了 17M，是上传大头。

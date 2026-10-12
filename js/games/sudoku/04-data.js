@@ -3,6 +3,7 @@
   'use strict';
 
   const SD = global.SD;
+  SD.Sudoku = SD.Sudoku || {};   // 被单测单独加载时也要能自建命名空间
   const B = SD.Base;
   const { el, clear, toast, modal, download, pickFile, loadImage } = SD.UI;
 
@@ -85,7 +86,7 @@
 
   function renderData(root, ctx) {
     clear(root);
-    const s = SD.Store.stats();
+    const s = SD.Sudoku.store.stats();
 
     /* 概览 */
     const winRate = s.games ? Math.round((s.wins / s.games) * 100) : 0;
@@ -179,7 +180,7 @@
           onclick: () => {
             SD.UI.confirm('清空统计', '所有对局记录、技巧统计都会被删除，设置不受影响。确定吗？', '清空').then((ok) => {
               if (!ok) return;
-              SD.Store.resetStats();
+              SD.Sudoku.store.resetStats();
               renderData(root, ctx);
               toast('统计已清空', 'ok');
             });
@@ -224,5 +225,5 @@
     });
   }
 
-  SD.Data = { renderData: renderData, exportBoardPNG: exportBoardPNG, serializeGame: serializeGame, stars: stars };
+  SD.Sudoku.data = { renderData: renderData, exportBoardPNG: exportBoardPNG, serializeGame: serializeGame, stars: stars };
 })(window);

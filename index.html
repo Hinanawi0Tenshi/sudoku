@@ -1,57 +1,37 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="light">
+<html lang="zh-CN" data-theme="light" data-view="title">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>数独 · Sudoku Studio</title>
+<title>益智游戏合集</title>
 <link rel="stylesheet" href="css/app.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔢</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧩</text></svg>">
 </head>
 <body>
 
-<!-- 启动页：所有入口都在这里，游戏页不再堆设置项 -->
-<section class="view view-home is-active" id="view-home">
-  <div class="home-card">
-    <div class="home-logo">9</div>
-    <h1 class="home-title">数独</h1>
-    <p class="home-sub">会出题、会讲解、会从图片里读题</p>
-    <nav class="home-menu">
-      <button class="home-item home-item-primary" data-go="play">
-        <span class="hi-label">开始数独</span>
-        <span class="hi-desc">按难度出一道新题</span>
-      </button>
-      <button class="home-item" data-go="bank">
-        <span class="hi-label">题库</span>
-        <span class="hi-desc">精选题目，也可以从照片存自己的</span>
-      </button>
-      <button class="home-item" data-go="daily">
-        <span class="hi-label">每日挑战</span>
-        <span class="hi-desc" id="home-daily-desc">同一天全世界同一道题</span>
-      </button>
-      <button class="home-item" data-go="mine">
-        <span class="hi-label">我的</span>
-        <span class="hi-desc">战绩纪录与卡牌图鉴</span>
-      </button>
-      <button class="home-item" data-go="learn">
-        <span class="hi-label">技巧教学</span>
-        <span class="hi-desc">每种技巧配一个演示棋盘</span>
-      </button>
-      <button class="home-item" data-go="settings">
-        <span class="hi-label">设置</span>
-        <span class="hi-desc">主题、高亮、提示、笔记</span>
-      </button>
-      <button class="home-item" data-go="about">
-        <span class="hi-label">关于</span>
-        <span class="hi-desc">这个游戏是怎么做的</span>
-      </button>
-    </nav>
-    <p class="home-stats" id="home-stats"></p>
+<!-- 标题页：选游戏。卡片由 SD.Registry 里的注册信息生成，这里只留挂载点 -->
+<section class="view view-title is-active" id="view-title">
+  <div class="title-card">
+    <div class="title-logo">合</div>
+    <h1 class="title-name">益智游戏合集</h1>
+    <p class="title-sub">数独 · 杀手数独 · 扫雷</p>
+    <div class="game-grid" id="game-grid"></div>
+    <div class="title-foot">
+      <button class="link-btn" id="title-settings">设置</button>
+      <span class="sep">·</span>
+      <button class="link-btn" id="title-about">关于</button>
+      <span class="title-points" id="title-points"></span>
+    </div>
   </div>
-  <div id="home-overlay" class="board-overlay" hidden></div>
 </section>
 
-<!-- 通用整页：设置 / 关于 / 题库详情共用，带返回 -->
+<!-- 当前游戏的首页：入口由游戏自己渲染 -->
+<section class="view view-home" id="view-home">
+  <div class="home-card" id="game-home"></div>
+</section>
+
+<!-- 通用整页：设置 / 关于 / 题库 / 每日挑战共用，带返回 -->
 <section class="view view-page" id="view-page">
   <header class="page-head">
     <button class="btn page-back" id="page-back">‹ 返回</button>
@@ -60,79 +40,12 @@
   <div class="page-body" id="page-root"></div>
 </section>
 
-<!-- 游戏页 -->
+<!-- 对局页：整块骨架由当前游戏自己建，壳不预设任何控件 -->
 <section class="view view-game" id="view-game">
-<header class="topbar">
-  <button class="brand" id="btn-home" title="回到首页">
-    <span class="logo">9</span>
-    <span class="brand-text">数独<small>Sudoku Studio</small></span>
-  </button>
-
-  <div class="status-strip" id="status-strip">
-    <div class="stat"><span class="stat-label" id="stat-difficulty-label">难度</span><b id="stat-difficulty">—</b></div>
-    <div class="stat"><span class="stat-label">用时</span><b id="stat-timer" class="mono">00:00</b></div>
-    <div class="stat"><span class="stat-label">提示</span><b id="stat-hints">0</b></div>
-    <div class="stat"><span class="stat-label">错误</span><b id="stat-mistakes">0</b></div>
-    <div class="stat"><span class="stat-label">空格</span><b id="stat-empty">0</b></div>
-  </div>
-
-  <div class="topbar-actions">
-    <button class="btn" id="btn-home-back" title="回到首页换题 (Esc)">‹ 首页</button>
-    <button class="btn" id="btn-undo" title="撤销 (Ctrl+Z)">撤销</button>
-    <button class="btn" id="btn-redo" title="重做 (Ctrl+Y)">重做</button>
-  </div>
-</header>
-
-<main class="layout">
-  <section class="board-area">
-
-    <div class="board-wrap">
-      <div id="board-mount"></div>
-      <div id="board-overlay" class="board-overlay" hidden></div>
-    </div>
-
-    <div class="number-pad" id="number-pad">
-      <button class="np-digit" data-digit="1"><span>1</span></button>
-      <button class="np-digit" data-digit="2"><span>2</span></button>
-      <button class="np-digit" data-digit="3"><span>3</span></button>
-      <button class="np-digit" data-digit="4"><span>4</span></button>
-      <button class="np-digit" data-digit="5"><span>5</span></button>
-      <button class="np-digit" data-digit="6"><span>6</span></button>
-      <button class="np-digit" data-digit="7"><span>7</span></button>
-      <button class="np-digit" data-digit="8"><span>8</span></button>
-      <button class="np-digit" data-digit="9"><span>9</span></button>
-      <button class="np-erase" data-digit="0" title="擦除 (Delete / 空格)">⌫</button>
-    </div>
-    <div class="board-tools">
-      <button class="btn" id="btn-notes" title="铅笔标记 (N)"><span class="tool-ico">✎</span> 笔记</button>
-      <button class="btn" id="btn-hint" title="提示 (H)"><span class="tool-ico">💡</span> 提示</button>
-      <button class="btn" id="btn-check" title="检查 (C)"><span class="tool-ico">✓</span> 检查</button>
-      <button class="btn" id="btn-auto-notes" title="按当前盘面重算所有铅笔标记">一键笔记</button>
-      <button class="btn" id="btn-solve" class="btn-warn"><span class="tool-ico">⚡</span> 自动求解</button>
-      <button class="btn" id="btn-learn" title="技巧教学"><span class="tool-ico">📖</span> 技巧教学</button>
-    </div>
-  </section>
-
-  <aside class="hint-area" id="hint-area" hidden>
-    <header class="hint-head">
-      <b>提示</b>
-      <div class="hint-head-actions">
-        <label class="field field-inline">
-          <span>等级上限</span>
-          <select id="hint-level"></select>
-        </label>
-        <button class="btn btn-icon" id="btn-hint-close" title="收起提示">✕</button>
-      </div>
-    </header>
-    <div id="hint-output" class="hint-output"></div>
-    <div class="hint-actions">
-      <button class="btn" id="btn-hint-show">只讲解</button>
-      <button class="btn btn-primary" id="btn-hint-apply">讲解并执行</button>
-      <button class="btn" id="btn-hint-auto">自动做完</button>
-    </div>
-  </aside>
-</main>
+  <div id="game-play"></div>
 </section>
+
+<div id="shell-overlay" class="board-overlay shell-overlay" hidden></div>
 <div id="dialog-root"></div>
 <div id="toast-root" class="toast-root" aria-live="polite"></div>
 
@@ -147,7 +60,7 @@
  * 它同时写进 window.SD_BUILD，启动时能在「关于」页看到当前跑的是哪一版。
  * 换包时只要改这一处。
  */
-window.SD_BUILD = '2026-10-03a';
+window.SD_BUILD = '2026-10-13a';
 (function () {
   var v = window.SD_BUILD;
   var nodes = document.querySelectorAll('script[src], link[href]');
@@ -162,6 +75,17 @@ window.SD_BUILD = '2026-10-03a';
   }
 })();
 </script>
+
+<!-- 平台层：游戏无关。00-ui 必须最先，其余各层都依赖它 -->
+<script src="js/platform/00-ui.js"></script>
+<script src="js/platform/01-registry.js"></script>
+<script src="js/platform/02-storage.js"></script>
+<script src="js/platform/03-points.js"></script>
+<script src="js/platform/04-shell.js"></script>
+<script src="js/platform/05-settings.js"></script>
+<script src="js/platform/06-about.js"></script>
+
+<!-- 9×9 数独族的共用算法与渲染原语 -->
 <script src="js/core/01-core.js"></script>
 <script src="js/core/02-board.js"></script>
 <script src="js/core/03-solver.js"></script>
@@ -170,18 +94,23 @@ window.SD_BUILD = '2026-10-03a';
 <script src="js/core/06-hints.js"></script>
 <script src="js/core/07-rater.js"></script>
 <script src="js/core/09-demo.js"></script>
+<script src="js/core/10-board-view.js"></script>
+
+<!-- 数独 -->
 <script src="js/vendor/tesseract/tesseract.min.js"></script>
-<script src="js/ui/10-dom.js"></script>
-<script src="js/ui/11-store.js"></script>
-<script src="js/ui/12-board-view.js"></script>
-<script src="js/ui/13-game.js"></script>
-<script src="js/ui/14-panels.js"></script>
-<script src="js/ui/15-data.js"></script>
-<script src="js/ui/16-settings.js"></script>
-<script src="js/ui/17-ocr-vision.js"></script>
-<script src="js/ui/18-ocr.js"></script>
-<script src="js/ui/19-app.js"></script>
-<script src="js/ui/20-gacha.js"></script>
-<script src="js/ui/21-learn.js"></script>
+<script src="js/games/sudoku/01-store.js"></script>
+<script src="js/games/sudoku/02-game.js"></script>
+<script src="js/games/sudoku/03-panels.js"></script>
+<script src="js/games/sudoku/04-data.js"></script>
+<script src="js/games/sudoku/05-settings.js"></script>
+<script src="js/games/sudoku/06-ocr-vision.js"></script>
+<script src="js/games/sudoku/07-ocr.js"></script>
+<script src="js/games/sudoku/08-app.js"></script>
+<script src="js/games/sudoku/09-gacha.js"></script>
+<script src="js/games/sudoku/10-learn.js"></script>
+
+<!-- 后续游戏。现在只注册，卡片显示「开发中」 -->
+<script src="js/games/killer/01-killer.js"></script>
+<script src="js/games/mines/01-mines.js"></script>
 </body>
 </html>

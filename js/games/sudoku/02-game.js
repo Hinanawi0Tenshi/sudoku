@@ -6,6 +6,7 @@
   'use strict';
 
   const SD = global.SD;
+  SD.Sudoku = SD.Sudoku || {};   // 被单测单独加载时也要能自建命名空间
   const B = SD.Base;
 
   const HISTORY_LIMIT = 400;
@@ -158,7 +159,7 @@
      */
     function afterMove(i) {
       const conf = conflicts();
-      if (conf.has(i) && SD.Store.settings().mistakeCheck && !st.board.isGiven(i)) {
+      if (conf.has(i) && SD.Sudoku.store.settings().mistakeCheck && !st.board.isGiven(i)) {
         // 不阻断：数字留在盘上，只把这一格记为填错。
         // 抹掉数字等于替玩家擦答案，反而让人不知道自己错在哪。
         if (!st.wrongCells.has(i)) {
@@ -168,7 +169,7 @@
         }
       }
 
-      if (SD.Store.settings().autoNotes) {
+      if (SD.Sudoku.store.settings().autoNotes) {
         const d = st.board.grid[i];
         if (d) st.board.propagateNotes(i);
         else st.board.rebuildNotes();
@@ -188,7 +189,7 @@
     function inputDigit(d) {
       const i = st.selected;
       if (i < 0 || st.won) return false;
-      const cfg = SD.Store.settings();
+      const cfg = SD.Sudoku.store.settings();
 
       if (st.noteMode) {
         if (st.board.isGiven(i)) return false;
@@ -243,7 +244,7 @@
         st.board.setValue(p.cell, p.digit, { force: true });
         st.board.locked[p.cell] = 1;
         st.hint.placedCells.add(p.cell);
-        SD.Store.recordTechnique(result.step.id);
+        SD.Sudoku.store.recordTechnique(result.step.id);
       }
       if (!result.step.placements.length) {
         // 纯消除型提示：把结论落到铅笔标记上，看得见摸得着
@@ -251,7 +252,7 @@
           if (st.board.notes[e.cell] & B.bit(e.digit)) st.board.notes[e.cell] &= ~B.bit(e.digit);
         }
       }
-      if (result.step.placements.length && SD.Store.settings().autoNotes) {
+      if (result.step.placements.length && SD.Sudoku.store.settings().autoNotes) {
         for (const p of result.step.placements) st.board.propagateNotes(p.cell);
       }
       st.hints++;
@@ -393,5 +394,5 @@
     };
   }
 
-  SD.Game = { create: create };
+  SD.Sudoku.game = { create: create };
 })(window);

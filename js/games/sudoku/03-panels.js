@@ -3,6 +3,7 @@
   'use strict';
 
   const SD = global.SD;
+  SD.Sudoku = SD.Sudoku || {};   // 被单测单独加载时也要能自建命名空间
   const B = SD.Base;
   const { el, clear } = SD.UI;
 
@@ -269,5 +270,5 @@
     }
     return body;
   }
-  SD.Panels = { renderHint: renderHint, renderTechIndex: renderTechIndex, renderAvailable: renderAvailable };
+  SD.Sudoku.panels = { renderHint: renderHint, renderTechIndex: renderTechIndex, renderAvailable: renderAvailable };
 })(window);

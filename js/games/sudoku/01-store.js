@@ -1,14 +1,20 @@
-/* 数独 · 本地持久化：设置、统计、当前对局
- * 全部落在 localStorage，换设备不会同步，这是刻意的取舍——数独数据不值得上云。
+/* 数独 · 本地持久化
+ *
+ * 数独自己的一份数据：设置、战绩、当前对局、我的题库、待做队列、图鉴钱包。
+ * 存储命名空间是 SD.Storage.create('sudoku', ...)，key 保持 sudoku-studio:v1 不变——
+ * 里面装着玩家已经做了几十局的记录，为了「目录看起来整齐」去改 key，
+ * 等于拿这些数据赌一次迁移。
+ *
+ * 主题和通关点数不在这里：它们是三款游戏共用的，存在全局命名空间。
  */
 (function (global) {
   'use strict';
-
   const SD = global.SD;
-  const KEY = 'sudoku-studio:v1';
+  // 数独自己的命名空间。01-store 是数独脚本里最先加载的一个，
+  // 所以 SD.Sudoku 在这里建出来，后面几个文件直接用。
+  SD.Sudoku = SD.Sudoku || {};
 
   const DEFAULT_SETTINGS = {
-    theme: 'light',
     autoNotes: true,
     highlight: true,
     highlightSame: true,
@@ -36,7 +42,6 @@
   /** 图鉴与抽卡的账本。重复卡转碎片、指定兑换靠 owned 里的张数。 */
   function emptyWallet() {
     return {
-      points: 0,
       shards: 0,
       owned: {},
       skins: [],
@@ -47,32 +52,38 @@
     };
   }
 
-  function read() {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (!raw) return { settings: Object.assign({}, DEFAULT_SETTINGS), stats: emptyStats(), game: null, userBank: [], wallet: emptyWallet(), queue: [], usedGrids: {} };
-      const parsed = JSON.parse(raw);
-      return {
-        settings: Object.assign({}, DEFAULT_SETTINGS, parsed.settings || {}),
-        stats: Object.assign(emptyStats(), parsed.stats || {}),
-        game: parsed.game || null,
-        userBank: parsed.userBank || [],
-        queue: parsed.queue || [],
-        usedGrids: parsed.usedGrids || {},
-        wallet: Object.assign(emptyWallet(), parsed.wallet || {}),
-      };
-    } catch (e) {
-      return { settings: Object.assign({}, DEFAULT_SETTINGS), stats: emptyStats(), game: null, userBank: [], wallet: emptyWallet(), queue: [], usedGrids: {} };
-    }
+  const NS = SD.Storage.create('sudoku', {
+    key: 'sudoku-studio:v1',
+    defaults: () => ({
+      settings: Object.assign({}, DEFAULT_SETTINGS),
+      stats: emptyStats(),
+      game: null,
+      userBank: [],
+      queue: [],
+      usedGrids: {},
+      wallet: emptyWallet(),
+    }),
+  });
+
+  // 直接持有数据对象引用，读写都走它。resetAll 会换掉命名空间内部的对象，所以是 let
+  let state = NS.data();
+
+  const flush = () => NS.flush();
+  const save = () => NS.save();
+
+  const settings = () => state.settings;
+  const stats = () => state.stats;
+
+  function set(key, value) {
+    state.settings[key] = value;
+    save();
   }
 
-  let state = read();
-  let saveTimer = null;
+  function saveGame(game) {
+    state.game = game;
+    save();
+  }
 
-  /**
-   * 题面来源标记。换生成器时它必须跟着变，旧存档才会被判过期而丢弃。
-   * 与 SD_BUILD 分开：发一次包不等于换了生成逻辑。
-   */
   /**
    * 生成器指纹：用固定种子出一道最简单的题，它的长相就是这一代生成器的身份。
    *
@@ -88,33 +99,6 @@
     } catch (e) {
       return 'unknown';
     }
-  }
-
-  function flush() {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(state));
-    } catch (e) {
-      // 存储写满或被禁用时静默降级：游戏本身不该因此崩掉
-      console.warn('本地存储写入失败：', e && e.message);
-    }
-  }
-
-  const save = () => {
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(flush, 220);
-  };
-
-  const settings = () => state.settings;
-  const stats = () => state.stats;
-
-  function set(key, value) {
-    state.settings[key] = value;
-    save();
-  }
-
-  function saveGame(game) {
-    state.game = game;
-    save();
   }
 
   /**
@@ -136,11 +120,7 @@
     }
     return g;
   }
-  /** 给存档补上当前这一代生成器的指纹 */
-  function stampGame(game) {
-    game.genStamp = generatorStamp();
-    return game;
-  }
+
   /**
    * 用户从照片存进来的题目。单独一个顶层键，不混进 stats：
    * stats 的形状会在数据面板里整块导出，掺进题目数组会撑破它的表格。
@@ -160,7 +140,7 @@
   }
 
   /**
-   * 自动生成的待做题。每档固定攒 3 道，做完一道补一道。
+   * 自动生成的待做题。每档固定攒 1 道，做完一道补一道。
    * 与 userBank 分开：那些是用户自己从照片存的，不该被自动逻辑删改，
    * 补位时也不会去动它们。
    */
@@ -211,6 +191,7 @@
     state.usedGrids = u;
     save();
   }
+
   function finishQueueItem(id) {
     const list = queue().slice();
     for (const q of list) if (q.id === id) { q.done = true; q.finishedAt = Date.now(); }
@@ -244,6 +225,7 @@
     if (added) save();
     return added;
   }
+
   /** 把做过的题存进我的题库。已存在则只更新成绩，不重复入库。 */
   function archivePuzzle(grid, band, timeMs) {
     const list = userBank().slice();
@@ -272,6 +254,7 @@
     state.userBank = userBank().filter((p) => p.id !== id);
     save();
   }
+
   /* ---------------- 统计写入 ---------------- */
 
   function recordGame(result) {
@@ -288,11 +271,9 @@
       const d = result.difficulty || 'custom';
       const bucket = s.byDifficulty[d] || (s.byDifficulty[d] = { games: 0, wins: 0, bestTime: 0, totalHints: 0 });
       bucket.games++;
-      if (result.won) {
-        bucket.wins++;
-        bucket.totalHints += result.hints || 0;
-        if (!bucket.bestTime || result.timeMs < bucket.bestTime) bucket.bestTime = result.timeMs;
-      }
+      bucket.wins++;
+      bucket.totalHints += result.hints || 0;
+      if (!bucket.bestTime || result.timeMs < bucket.bestTime) bucket.bestTime = result.timeMs;
       if (!s.bestTimes[d] || result.timeMs < s.bestTimes[d]) s.bestTimes[d] = result.timeMs;
       if (result.dailyKey) {
         const rec = s.daily[result.dailyKey] || (s.daily[result.dailyKey] = { timeMs: null, won: false, tries: 0 });
@@ -321,6 +302,7 @@
     rec.total = total;
     save();
   }
+
   function recordTechnique(id) {
     state.stats.techniqueUse[id] = (state.stats.techniqueUse[id] || 0) + 1;
     save();
@@ -356,6 +338,7 @@
       total: won,
     };
   }
+
   function resetStats() {
     state.stats = emptyStats();
     save();
@@ -368,19 +351,18 @@
   }
 
   function resetAll() {
-    state = { settings: Object.assign({}, DEFAULT_SETTINGS), stats: emptyStats(), game: null };
-    flush();
+    NS.reset();
+    state = NS.data();
   }
 
-  SD.Store = {
+  SD.Sudoku.store = {
     settings: settings,
-    state: read,
+    state: () => state,
     emptyWallet: emptyWallet,
     set: set,
     stats: stats,
     saveGame: saveGame,
     loadGame: loadGame,
-    stampGame: stampGame,
     generatorStamp: generatorStamp,
     recordGame: recordGame,
     recordTechnique: recordTechnique,
@@ -388,7 +370,7 @@
     recordDailyProgress: recordDailyProgress,
     userBank: userBank,
     addUserPuzzle: addUserPuzzle,
-archivePuzzle: archivePuzzle,
+    archivePuzzle: archivePuzzle,
     removeUserPuzzle: removeUserPuzzle,
     queue: queue,
     queueOf: queueOf,

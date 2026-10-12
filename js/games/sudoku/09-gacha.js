@@ -13,6 +13,7 @@
   'use strict';
 
   const SD = global.SD;
+  SD.Sudoku = SD.Sudoku || {};   // 被单测单独加载时也要能自建命名空间
   const el = SD.UI.el;
 
   const RARITY = {
@@ -64,9 +65,12 @@
   }
 
   function renderLibrary(root) {
-    const wallet = SD.Store.state().wallet || {};
+    const wallet = SD.Sudoku.store.state().wallet || {};
     const owned = wallet.owned || {};
-    root.appendChild(el('p.lead', { text: '通关累计点数，在图鉴里抽卡。抽取与兑换还在做，先看看卡面。' }));
+    // 点数是三款游戏共用的账本，数独自己也往里贡献，所以余额从 SD.Points 读
+    root.appendChild(el('p.lead', {
+      text: '通关点数 ' + SD.Points.total() + '（三款游戏通用），在图鉴里抽卡。抽取与兑换还在做，先看看卡面。',
+    }));
     const lib = el('div.gacha-lib');
     for (const card of LIST) {
       const n = owned[card.id] || 0;
@@ -82,5 +86,5 @@
   function draw() { return null; }
   function exchange() { return null; }
 
-  SD.Gacha = { LIST: LIST, byId: byId, RARITY: RARITY, renderLibrary: renderLibrary, draw: draw, exchange: exchange };
+  SD.Sudoku.gacha = { LIST: LIST, byId: byId, RARITY: RARITY, renderLibrary: renderLibrary, draw: draw, exchange: exchange };
 })(window);

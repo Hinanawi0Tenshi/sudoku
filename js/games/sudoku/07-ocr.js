@@ -8,6 +8,7 @@
   'use strict';
 
   const SD = global.SD;
+  SD.Sudoku = SD.Sudoku || {};   // 被单测单独加载时也要能自建命名空间
   const B = SD.Base;
   const { el, clear, toast, fileToImage, loadImage, onPasteImage, modal } = SD.UI;
 
@@ -80,7 +81,7 @@
 
     setStatus('正在寻找网格边缘…');
     setTimeout(() => {
-      const found = SD.Vision.detectQuad(c);
+      const found = SD.Sudoku.vision.detectQuad(c);
       if (!found) {
         setStatus('自动定位失败：请手动拖动四个角对齐网格的外框', 'warn');
         toast('没找到网格，请手动对齐四个角', 'err');
@@ -184,7 +185,7 @@
 
   const labelOf = (k) => ({ tl: '左上', tr: '右上', br: '右下', bl: '左下' })[k];
 
-  SD.OCR = { state: state, loadSource: loadSource, autoDetect: autoDetect, drawStage: drawStage, LOW_CONF: LOW_CONF, log: log, setStatus: setStatus };
+  SD.Sudoku.ocr = { state: state, loadSource: loadSource, autoDetect: autoDetect, drawStage: drawStage, LOW_CONF: LOW_CONF, log: log, setStatus: setStatus };
 
   /* ---------------- Tesseract ---------------- */
 
@@ -455,7 +456,7 @@
       src.getContext('2d', { willReadFrequently: true }).drawImage(state.image, 0, 0);
 
       setStatus('正在做透视校正…');
-      const extracted = SD.Vision.extractCells(src, state.quad, state.cellSize);
+      const extracted = SD.Sudoku.vision.extractCells(src, state.quad, state.cellSize);
       if (!extracted) throw new Error('透视校正失败，请调整四个角后重试');
       state.extracted = extracted;
 
@@ -765,7 +766,7 @@
     }, 20);
   }
 
-  SD.OCR.mount = mount;
-  SD.OCR.recognize = recognize;
-  SD.OCR.renderResult = renderResult;
+  SD.Sudoku.ocr.mount = mount;
+  SD.Sudoku.ocr.recognize = recognize;
+  SD.Sudoku.ocr.renderResult = renderResult;
 })(window);

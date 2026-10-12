@@ -8,6 +8,7 @@
   'use strict';
 
   const SD = global.SD;
+  SD.Sudoku = SD.Sudoku || {};   // 被单测单独加载时也要能自建命名空间
   const B = SD.Base;
   const el = SD.UI.el;
 
@@ -111,5 +112,5 @@
     root.appendChild(lib);
   }
 
-  SD.Learn = { renderLearn: renderLearn };
+  SD.Sudoku.learn = { renderLearn: renderLearn };
 })(window);

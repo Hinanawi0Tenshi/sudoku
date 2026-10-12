@@ -5,6 +5,7 @@
   'use strict';
 
   const SD = global.SD;
+  SD.Sudoku = SD.Sudoku || {};   // 被单测单独加载时也要能自建命名空间
   const Vision = {};
 
   /* ---------------- 单应矩阵 ---------------- */
@@ -143,7 +144,7 @@
     return gray;
   }
 
-  SD.Vision = { homography: homography, warpQuad: warpQuad, otsu: otsu, toGray: toGray, solveLinear: solveLinear };
+  SD.Sudoku.vision = { homography: homography, warpQuad: warpQuad, otsu: otsu, toGray: toGray, solveLinear: solveLinear };
 
   /* ---------------- Hough 网格定位 ---------------- */
 
@@ -181,7 +182,7 @@
    */
   function detectQuad(canvas) {
     if (!canvas || !canvas.width || !canvas.height) return null;
-    return detectQuadFromGray(SD.Vision.toGray(canvas), canvas.width, canvas.height);
+    return detectQuadFromGray(SD.Sudoku.vision.toGray(canvas), canvas.width, canvas.height);
   }
 
   /** 纯灰度数组版本，便于在 Node 里单测（无需 canvas） */
@@ -466,7 +467,7 @@
    * 而四条外框线是图中最长的暗线，直接量出来比假设四边形精确更可靠。
    */
   function refineGrid(canvas) {
-    const gray = SD.Vision.toGray(canvas);
+    const gray = SD.Sudoku.vision.toGray(canvas);
     const W = canvas.width;
     const H = canvas.height;
     // 同样用局部对比度找线：纸纹和 JPEG 噪点在全局阈值下会糊成一片，
@@ -509,11 +510,11 @@
   /** 按四边形切出 81 个格子；二值阈值用整图 Otsu，格子边界由 refineGrid 量出 */
   function extractCells(canvas, quad, cellPx) {
     const size = cellPx || 80;
-    const warped = SD.Vision.warpQuad(canvas, [quad.tl, quad.tr, quad.br, quad.bl], size * 9);
+    const warped = SD.Sudoku.vision.warpQuad(canvas, [quad.tl, quad.tr, quad.br, quad.bl], size * 9);
     if (!warped) return null;
     const grid = refineGrid(warped);
     if (!grid) return null;
-    const gray = SD.Vision.toGray(warped);
+    const gray = SD.Sudoku.vision.toGray(warped);
 
     const cells = [];
     for (let i = 0; i < 81; i++) {
@@ -551,7 +552,7 @@
     return { warped: warped, cells: cells, grid: grid };
   }
 
-  SD.Vision.detectQuad = detectQuad;
-  SD.Vision.detectQuadFromGray = detectQuadFromGray;   // 供 Node 单测直接喂灰度数组
-  SD.Vision.extractCells = extractCells;
+  SD.Sudoku.vision.detectQuad = detectQuad;
+  SD.Sudoku.vision.detectQuadFromGray = detectQuadFromGray;   // 供 Node 单测直接喂灰度数组
+  SD.Sudoku.vision.extractCells = extractCells;
 })(window);

@@ -40,7 +40,7 @@ const MAKE = (mode) => `(function () {
   const target = [ {x:96,y:70}, {x:672,y:44}, {x:700,y:648}, {x:62,y:676} ];
   // homography(src, dst) 是 src→dst；这里要的是「输出像素 → 源像素」，
   // 所以要把 target 放在 src 位置，否则会双重扭曲，网格根本不在 target 上
-  const Hm = SD.Vision.homography(target, [{x:0,y:0},{x:INNER,y:0},{x:INNER,y:INNER},{x:0,y:INNER}]);
+  const Hm = SD.Sudoku.vision.homography(target, [{x:0,y:0},{x:INNER,y:0},{x:INNER,y:INNER},{x:0,y:INNER}]);
   const photo = document.createElement('canvas');
   photo.width = SIZE; photo.height = SIZE;
   const p = photo.getContext('2d');
@@ -87,12 +87,12 @@ const MAKE = (mode) => `(function () {
 })()`;
 
 const SCORE = `(async function () {
-  await SD.OCR.recognize();
-  const s = SD.OCR.state, f = window.__fx;
+  await SD.Sudoku.ocr.recognize();
+  const s = SD.Sudoku.ocr.state, f = window.__fx;
   let right = 0, wrong = 0, missing = 0, extra = 0, low = 0;
   for (let i = 0; i < 81; i++) {
     const truth = f.givens[i], got = s.digits[i], conf = s.confidences[i];
-    if (conf >= 0 && conf < SD.OCR.LOW_CONF) low++;
+    if (conf >= 0 && conf < SD.Sudoku.ocr.LOW_CONF) low++;
     if (got === truth && truth) right++;
     else if (got && truth) wrong++;
     else if (!got && truth) missing++;
@@ -126,11 +126,14 @@ const SCORE = `(async function () {
   await send('Page.navigate', { url: 'http://127.0.0.1:8731/index.html' });
   // 浏览器把页面标签开出来，脚本未必跑完。必须等应用真正就绪，
   // 否则第一个场景会撞上 SD.Generator 还不存在的时刻。
+  //
+  // 探针里不再要求棋盘存在：应用现在落在标题页，棋盘要先进数独才挂出来，
+  // 而下面两个场景只驱动 OCR 模块本身，本来就不经过棋盘。
   let ready = false;
   for (let i = 0; i < 200 && !ready; i++) {
     await sleep(300);
     try {
-      ready = await ev('String(!!(window.SD && SD.Generator && SD.OCR && document.querySelector(".cell"))) === "true"');
+      ready = await ev('String(!!(window.SD && SD.Generator && SD.Sudoku.ocr)) === "true"');
     } catch (e) { /* 页面还没到能求值的程度 */ }
   }
   if (!ready) { console.log('  ✗ 页面未就绪，放弃'); ws.close(); b.kill(); process.exit(2); }
@@ -145,10 +148,10 @@ const SCORE = `(async function () {
       results[mode] = null;
       continue;
     }
-    await ev('(async function(){ await SD.OCR.loadSource(' + JSON.stringify(url) + '); })()', 30000);
+    await ev('(async function(){ await SD.Sudoku.ocr.loadSource(' + JSON.stringify(url) + '); })()', 30000);
     // 两种场景都用手动对齐的四边形：自动定位的质量由 tests/detect-test.js 单独把关，
     // 这里量的是「四边形对齐之后」的识别准确率，也就是用户拖完角之后的效果
-    await ev('SD.OCR.state.quad = JSON.parse(JSON.stringify(window.__fx.quad)); SD.OCR.drawStage();', 10000);
+    await ev('SD.Sudoku.ocr.state.quad = JSON.parse(JSON.stringify(window.__fx.quad)); SD.Sudoku.ocr.drawStage();', 10000);
     if (mode === 'photo') console.log('  [照片] 透视 + JPEG 压缩 + 传感器噪声 + 污点，四边形为手动对齐');
     const r = await ev(SCORE, 180000);
     if (typeof r !== 'object' || !r) { console.log('  x ' + mode + ' 识别失败:', r); continue; }

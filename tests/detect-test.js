@@ -7,8 +7,8 @@ const path = require('path');
 const vm = require('vm');
 globalThis.window = globalThis;
 globalThis.SD = {};
-vm.runInThisContext(fs.readFileSync(path.join(__dirname, '..', 'js', 'ui', '17-ocr-vision.js'), 'utf8'), { filename: 'v' });
-const V = SD.Vision;
+vm.runInThisContext(fs.readFileSync(path.join(__dirname, '..', 'js', 'games', 'sudoku', '06-ocr-vision.js'), 'utf8'), { filename: 'v' });
+const V = SD.Sudoku.vision;
 
 function renderPhoto(size, quad, opts) {
   const o = opts || {};

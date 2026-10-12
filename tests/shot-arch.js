@@ -1,0 +1,89 @@
+/* 益智游戏合集 · 关键页面截图
+ * 用 CDP 直接驱动真实页面抓图，看的是实际渲染结果而不是代码推断。
+ * 用法：先起本地服务，再 node tests/shot-arch.js
+ */
+'use strict';
+const { spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
+const URL = process.argv[2] || 'http://127.0.0.1:8731/index.html';
+const PORT = 9413;
+const profile = path.join(os.tmpdir(), 'sudoku-shot-' + Date.now());
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+(async () => {
+  const b = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+    '--remote-debugging-port=' + PORT, '--user-data-dir=' + profile, '--window-size=1400,1000', 'about:blank'], { stdio: 'ignore' });
+  let target = null;
+  for (let i = 0; i < 60 && !target; i++) {
+    await sleep(400);
+    try {
+      const list = await (await fetch('http://127.0.0.1:' + PORT + '/json/list')).json();
+      target = list.find((t) => t.type === 'page' && t.webSocketDebuggerUrl);
+    } catch (e) { /* 还没起来 */ }
+  }
+  if (!target) throw new Error('连不上调试端口');
+
+  const ws = new WebSocket(target.webSocketDebuggerUrl);
+  await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
+  let id = 0; const pend = new Map();
+  ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id); } };
+  const send = (method, params) => new Promise((res) => { pend.set(++id, res); ws.send(JSON.stringify({ id, method, params: params || {} })); });
+  const ev = async (expr) => {
+    const m = await send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true });
+    if (!m || m.error) throw new Error('CDP: ' + JSON.stringify(m && m.error));
+    if (m.result && m.result.exceptionDetails) {
+      const d = m.result.exceptionDetails;
+      throw new Error('页面异常: ' + (d.exception ? d.exception.description : d.text));
+    }
+    return m.result.result.value;
+  };
+
+  await send('Runtime.enable');
+  await send('Page.enable');
+  await send('Page.navigate', { url: URL });
+  for (let i = 0; i < 200; i++) {
+    await sleep(250);
+    if (await ev('!!(window.SD && SD.Shell && SD.Sudoku.app)')) break;
+  }
+  await sleep(600);
+
+  const shot = async (name) => {
+    const r = await send('Page.captureScreenshot', { format: 'png' });
+    fs.writeFileSync(path.join(__dirname, name), Buffer.from(r.result.data, 'base64'));
+    console.log('  ' + name);
+  };
+
+  await shot('shot-title.png');
+
+  await ev('document.querySelector(".game-card:not(.is-soon)").click()');
+  await sleep(1200);
+  await shot('shot-sudoku-home.png');
+
+  await ev('document.getElementById("btn-home").click()');
+  await sleep(300);
+  await ev('document.getElementById("title-settings").click()');
+  await sleep(500);
+  await shot('shot-settings.png');
+
+  await ev('document.getElementById("page-back").click()');
+  await sleep(300);
+  await ev('document.getElementById("title-about").click()');
+  await sleep(400);
+  await shot('shot-about.png');
+
+  // 回到数独并进对局页，看 JS 搭出来的对局骨架
+  await ev('document.getElementById("page-back").click()');
+  await sleep(300);
+  await ev('document.querySelector(".game-card:not(.is-soon)").click()');
+  await sleep(1500);
+  await ev('SD.Sudoku.app.showView("game")');
+  await sleep(600);
+  await shot('shot-sudoku-play.png');
+
+  ws.close(); b.kill();
+  process.exit(0);
+})().catch((e) => { console.error('失败: ' + (e && e.message) + '\n' + (e && e.stack)); process.exit(1); });
