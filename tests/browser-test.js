@@ -1366,6 +1366,47 @@ async function main() {
     return { ok: !!d.settings && !!d.stats, info: 'settings ' + Object.keys(d.settings).length + ' 项, stats ' + Object.keys(d.stats).length + ' 项' };
   })()`);
 
+  /* ================= 导航 ================= */
+
+  await step('从对局页能一路退回标题页换游戏', `(async function(){
+    SD.Shell.showView('game');
+    await new Promise(r => setTimeout(r, 120));
+    document.getElementById('btn-home-back').click();
+    await new Promise(r => setTimeout(r, 180));
+    const atHome = document.documentElement.getAttribute('data-view');
+    const exit = document.getElementById('btn-game-exit');
+    if (!exit) return { ok: false, info: '游戏首页没有「换个游戏」按钮' };
+    exit.click();
+    await new Promise(r => setTimeout(r, 250));
+    const atTitle = document.documentElement.getAttribute('data-view');
+    const cards = document.querySelectorAll('.game-card').length;
+    const clickable = Array.from(document.querySelectorAll('.game-card')).filter((c) => !c.classList.contains('is-soon')).length;
+    return { ok: atHome === 'home' && atTitle === 'title' && cards === 3 && clickable === 3,
+             info: '对局页 → ' + atHome + ' → ' + atTitle + '，标题页 ' + cards + ' 张卡片（' + clickable + ' 张可进入）' };
+  })()`);
+
+  await step('三款游戏都能进能出', `(async function(){
+    const out = [];
+    for (const name of ['数独', '杀手数独', '扫雷']) {
+      const card = Array.from(document.querySelectorAll('.game-card'))
+        .find((c) => c.querySelector('.gc-name').textContent === name);
+      if (!card) { out.push(name + ':没有卡片'); continue; }
+      card.click();
+      await new Promise(r => setTimeout(r, 300));
+      const inGame = document.documentElement.getAttribute('data-view');
+      const items = document.querySelectorAll('.home-item').length;
+      const exit = document.getElementById('btn-game-exit');
+      if (!exit) { out.push(name + ':首页没有返回键'); continue; }
+      exit.click();
+      await new Promise(r => setTimeout(r, 250));
+      const back = document.documentElement.getAttribute('data-view');
+      out.push(name + ':' + inGame + '/' + items + '入口/退回' + back);
+    }
+    // 不用正则：这段是嵌在模板字符串里的，反斜杠转义过几层容易丢
+    const bad = out.filter((s) => s.indexOf('home/') < 0 || s.indexOf('入口/退回title') < 0);
+    return { ok: bad.length === 0, info: out.join('  |  ') };
+  })()`);
+
   ws.close();
   browser.kill();
   try { fs.rmSync(profile, { recursive: true, force: true }); } catch (e) {}

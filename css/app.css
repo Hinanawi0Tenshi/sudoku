@@ -1695,3 +1695,26 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .killer-demo .cell-value { font-size: clamp(12px, 2.1vw, 19px); }
 .killer-demo .cell-cage { font-size: 8.5px; top: 0; left: 2px; }
 .killer-demo .board { border-width: 1px; }
+
+/* 游戏首页的返回键。放在左上角、做成胶囊按钮：它是对局页退回来之后唯一的出路，
+   藏在品牌 logo 里（那条路也有，但没有任何视觉提示）等于把人关在游戏里。 */
+.home-back {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  appearance: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 13px;
+  box-shadow: var(--shadow-sm);
+  transition: border-color .14s, color .14s, background .14s;
+}
+.home-back:hover { border-color: var(--accent); color: var(--accent); background: var(--surface-2); }
+.home-back:active { transform: translateY(1px); }

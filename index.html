@@ -28,6 +28,9 @@
 
 <!-- 当前游戏的首页：入口由游戏自己渲染 -->
 <section class="view view-home" id="view-home">
+  <!-- 从对局页退回来之后，这里是唯一的出路。不给一个显式按钮，
+       玩家进了游戏就没有回头路——顶栏只在对局页里有。 -->
+  <button class="home-back" id="btn-game-exit" data-shell="leave" title="回到标题页，换一款游戏">‹ 换个游戏</button>
   <div class="home-card" id="game-home"></div>
 </section>
 
