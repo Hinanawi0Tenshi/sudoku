@@ -242,9 +242,17 @@
         D.recordTechnique(entry.step.id);
       }
       if (!entry.step.placements.length) {
-        // 纯消除型提示：把结论落到铅笔标记上，看得见摸得着
+        // 纯消除型提示：把结论落到铅笔标记上，看得见摸得着。
+        // 没开笔记时 notes 全是 0，直接删等于什么都没删——玩家点了「执行」，
+        // 盘面纹丝不动、面板也没变，看着就像卡死。所以先把这一格的当前候选填进去，
+        // 删除才有对象，变化也才看得见。
+        let base = null;
         for (const e of entry.step.eliminations) {
-          if (st.board.notes[e.cell] & B.bit(e.digit)) st.board.notes[e.cell] &= ~B.bit(e.digit);
+          if (!st.board.notes[e.cell]) {
+            if (!base) base = D.baseCandidates ? D.baseCandidates(st.board.grid) : SD.Validation.computeCandidates(st.board.grid);
+            st.board.notes[e.cell] = base[e.cell];
+          }
+          st.board.notes[e.cell] &= ~B.bit(e.digit);
         }
       }
       if (entry.step.placements.length && D.settings().autoNotes) {
@@ -263,7 +271,26 @@
      * 提示面板要一次列出全部，让用户自己挑下一步走哪条路。
      */
     function hintList(level) {
-      return D.hints.available(st.board.grid, { maxLevel: level || 5 });
+      const all = D.hints.available(st.board.grid, { maxLevel: level || 5 });
+      // 已经落地的纯消除型解法不再重复列出。提示是按盘面算的，而消除不改盘面，
+      // 所以同一条解法会永远排在第一——玩家点完「执行」面板一个字都不变，像卡住了。
+      return all.filter((entry) => !isStepDone(entry.step));
+    }
+
+    /**
+     * 这一步的结论是不是已经在盘面上了。只看纯消除型：
+     * 落子型会改变盘面，下一轮自然不会再出现同一条。
+     *
+     * 判据要求**所有**受影响的格子都有铅笔标记——没有标记说明玩家还没做过这一步，
+     * 不能算「已完成」，否则刚开局（notes 全空）会把所有消除型解法一次滤光。
+     */
+    function isStepDone(step) {
+      if (!step || (step.placements && step.placements.length)) return false;
+      const elims = step.eliminations || [];
+      if (!elims.length) return false;
+      for (const e of elims) if (!st.board.notes[e.cell]) return false;
+      for (const e of elims) if (st.board.notes[e.cell] & B.bit(e.digit)) return false;
+      return true;
     }
 
     function hint(level, apply) {

@@ -1285,6 +1285,35 @@ async function main() {
     return { ok: after > before || g.state.won, info: '已填格 ' + before + ' → ' + after };
   })()`);
 
+  // 提示列表是按盘面算的，而「删除候选」这类解法不改盘面——曾因此同一条永远排在第一，
+  // 玩家点完「执行」面板一个字都不变，看着像卡死。这条盯着它必须往前走。
+  await step('纯消除型提示执行后，面板不会卡在同一条', `(async function(){
+    const g = SD.Killer.app.getGame();
+    const area = document.getElementById('hint-area');
+    if (area && area.hidden) document.getElementById('btn-k-hint').click();
+    await new Promise(r => setTimeout(r, 700));
+    const sig = () => {
+      const o = document.getElementById('hint-output');
+      if (!o) return '';
+      const t = o.querySelector('.mine-hint-title');
+      const c = o.querySelector('.mine-concl');
+      return (t ? t.textContent : '') + '|' + (c ? c.textContent : '');
+    };
+    const filled = () => Array.from(g.state.board.grid).filter(Boolean).length;
+    let tried = 0, stuck = 0;
+    for (let k = 0; k < 3; k++) {
+      const before = sig();
+      if (!before) break;
+      const gb = filled();
+      document.getElementById('btn-k-hint-apply').click();
+      await new Promise(r => setTimeout(r, 500));
+      tried++;
+      // 落子型本来就会改变盘面；只看纯消除型（盘面没动）有没有卡住
+      if (filled() === gb && sig() === before) stuck++;
+    }
+    return { ok: tried > 0 && stuck === 0, info: '试了 ' + tried + ' 次，卡在同一条 ' + stuck + ' 次' };
+  })()`);
+
   await step('笼内定数：一格笼子直接给出数字', `(async function(){
     // 一路用提示推，直到出现一格笼子，验证它填的就是笼和
     const g = SD.Killer.app.getGame();
