@@ -1464,6 +1464,87 @@ async function main() {
              info: '弹窗「' + title + '」，步数 ' + S.app.getBoard().moves + '，最佳记录 ' + (best ? best.moves + ' 步' : '无') };
   })()`, 120000);
 
+  /* ================= 2048 ================= */
+
+  await step('标题页把 2048 列为可进入', `(async function(){
+    document.getElementById('btn-home').click();
+    await new Promise(r => setTimeout(r, 300));
+    const card = Array.from(document.querySelectorAll('.game-card'))
+      .find((c) => c.querySelector('.gc-name').textContent === '2048');
+    if (!card) return { ok: false, info: '没有卡片' };
+    const soon = card.classList.contains('is-soon');
+    card.click();
+    await new Promise(r => setTimeout(r, 300));
+    const title = document.querySelector('.home-title');
+    return { ok: !soon && !!title && title.textContent === '2048',
+             info: '置灰=' + soon + '，首页标题=' + (title ? title.textContent : '无') };
+  })()`);
+
+  await step('2048：推牌会合并、加分、落新牌', `(async function(){
+    document.querySelector('.home-item[data-go=classic]').click();
+    await new Promise(r => setTimeout(r, 500));
+    const G = SD.G2048;
+    const b = G.app.getBoard();
+    const tiles0 = Array.from(b.cells).filter(Boolean).length;
+    const cells = document.querySelectorAll('.g-cell').length;
+    const tiles = document.querySelectorAll('.g-tile').length;
+
+    // 摆一个一定能合并的盘面，推左必得分
+    b.cells = Int16Array.from([2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    b.score = 0; b.moves = 0; b.state = 'playing';
+    G.app.render();
+    const moved = G.app.move('left');
+    const merged = b.cells[0] === 4 && b.cells[1] === 0;
+    const gained = b.score === 4;
+
+    // 推不动时不该算步数
+    b.cells = Int16Array.from([2, 4, 8, 16, 4, 8, 16, 32, 8, 16, 32, 64, 16, 32, 64, 128]);
+    G.app.render();
+    const m = b.moves;
+    const stuck = G.app.move('left') === false && b.moves === m;
+
+    return { ok: tiles0 === 2 && cells === 16 && tiles === 2 && moved && merged && gained && stuck,
+             info: '背景 ' + cells + ' 格，开局 ' + tiles0 + ' 块；合并=' + merged + '，加分=' + gained + '，推不动不计步=' + stuck };
+  })()`);
+
+  await step('2048：提示给出四个方向的期望分', `(function(){
+    const G = SD.G2048;
+    const b = G.app.getBoard();
+    b.cells = Int16Array.from([2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    b.state = 'playing';
+    const rank = G.app.rank();
+    const sorted = rank.every((x, i) => i === 0 || rank[i - 1].expect >= x.expect);
+    const hasDir = rank.length > 0 && !!rank[0].dir;
+    const shapes = rank.every((x) => typeof x.expect === 'number' && G.DIRS.indexOf(x.dir) >= 0);
+    // 死局必须没有候选
+    b.cells = Int16Array.from([2, 4, 2, 4, 4, 2, 4, 2, 2, 4, 2, 4, 4, 2, 4, 2]);
+    const dead = G.app.rank().length;
+    return { ok: sorted && hasDir && shapes && dead === 0,
+             info: rank.map((x) => x.dir + '=' + Math.round(x.expect)).join(' ') + '；死局候选 ' + dead + ' 个' };
+  })()`);
+
+  await step('2048：求解器能自己打到结束并结算', `(async function(){
+    const G = SD.G2048;
+    G.app.startLevel('classic');
+    await new Promise(r => setTimeout(r, 300));
+    let guard = 0;
+    // 求解器自己打一局要一千步上下（实测 964~1142 步），700 步根本到不了结算
+    while (G.app.getBoard().state !== 'over' && guard++ < 1600) {
+      const r = G.app.rank();
+      if (!r.length) break;
+      G.app.move(r[0].dir);
+    }
+    await new Promise(r => setTimeout(r, 600));
+    const b = G.app.getBoard();
+    const box = document.querySelector('#dialog-root .modal');
+    const title = box ? box.querySelector('h2').textContent : '';
+    const close = box ? box.querySelector('.modal-head .btn') : null;
+    if (close) close.click();
+    const rec = SD.G2048.store.best('classic');
+    return { ok: b.state === 'over' && b.score > 500 && G.maxTile(b) >= 256 && rec >= b.score,
+             info: guard + ' 步，状态 ' + b.state + '，得分 ' + b.score + '，最大牌 ' + G.maxTile(b) + '，弹窗「' + title + '」，记录 ' + rec };
+  })()`, 200000);
+
   /* ================= 导航 ================= */
 
   await step('从对局页能一路退回标题页换游戏', `(async function(){
@@ -1479,24 +1560,25 @@ async function main() {
     const atTitle = document.documentElement.getAttribute('data-view');
     const cards = document.querySelectorAll('.game-card').length;
     const clickable = Array.from(document.querySelectorAll('.game-card')).filter((c) => !c.classList.contains('is-soon')).length;
-    return { ok: atHome === 'home' && atTitle === 'title' && cards === 4 && clickable === 4,
+    return { ok: atHome === 'home' && atTitle === 'title' && cards === 5 && clickable === 5,
              info: '对局页 → ' + atHome + ' → ' + atTitle + '，标题页 ' + cards + ' 张卡片（' + clickable + ' 张可进入）' };
   })()`);
 
-  await step('四款游戏都能进能出', `(async function(){
+  // 全程同步：enter() / leave() 本来就是同步改视图的，不需要等定时器。
+  // 原先这里每款游戏都 await 两次 setTimeout，在无头浏览器里被节流拉到几十秒一次，
+  // 五次就是几分钟——超时被中断，而打点显示其实早就走完了。
+  await step('五款游戏都能进能出', `(function(){
     const out = [];
-    for (const name of ['数独', '杀手数独', '扫雷', '数字华容道']) {
+    for (const name of ['数独', '杀手数独', '扫雷', '数字华容道', '2048']) {
       const card = Array.from(document.querySelectorAll('.game-card'))
         .find((c) => c.querySelector('.gc-name').textContent === name);
       if (!card) { out.push(name + ':没有卡片'); continue; }
       card.click();
-      await new Promise(r => setTimeout(r, 300));
       const inGame = document.documentElement.getAttribute('data-view');
       const items = document.querySelectorAll('.home-item').length;
       const exit = document.getElementById('btn-game-exit');
       if (!exit) { out.push(name + ':首页没有返回键'); continue; }
       exit.click();
-      await new Promise(r => setTimeout(r, 250));
       const back = document.documentElement.getAttribute('data-view');
       out.push(name + ':' + inGame + '/' + items + '入口/退回' + back);
     }
