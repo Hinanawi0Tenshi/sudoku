@@ -1392,6 +1392,78 @@ async function main() {
     return { ok: !!d.settings && !!d.stats, info: 'settings ' + Object.keys(d.settings).length + ' 项, stats ' + Object.keys(d.stats).length + ' 项' };
   })()`);
 
+  /* ================= 数字华容道 ================= */
+
+  await step('标题页把数字华容道列为可进入', `(async function(){
+    const card = Array.from(document.querySelectorAll('.game-card'))
+      .find((c) => c.querySelector('.gc-name').textContent === '数字华容道');
+    if (!card) return { ok: false, info: '没有卡片' };
+    const soon = card.classList.contains('is-soon');
+    card.click();
+    await new Promise(r => setTimeout(r, 300));
+    const view = document.documentElement.getAttribute('data-view');
+    const title = document.querySelector('.home-title');
+    return { ok: !soon && view === 'home' && !!title && title.textContent === '数字华容道',
+             info: '置灰=' + soon + '，视图=' + view + '，首页标题=' + (title ? title.textContent : '无') };
+  })()`);
+
+  await step('数字华容道：相邻能滑、不相邻不动', `(async function(){
+    document.querySelector('.home-item[data-go=n3]').click();
+    await new Promise(r => setTimeout(r, 500));
+    const S = SD.Slide;
+    const b = S.app.getBoard();
+    const tiles = document.querySelectorAll('.slide-tile').length;
+    const near = S.neighborsOf(b.n, b.empty)[0];
+    const m0 = b.moves;
+    S.app.tap(b.cells[near]);
+    const moved = b.moves === m0 + 1;
+    // 找一块不相邻的：点了必须纹丝不动
+    let far = null;
+    for (let i = 0; i < b.cells.length; i++) {
+      if (b.cells[i] && S.neighborsOf(b.n, b.empty).indexOf(i) < 0) { far = b.cells[i]; break; }
+    }
+    const m1 = b.moves;
+    if (far !== null) S.app.tap(far);
+    const still = b.moves === m1;
+    return { ok: tiles === 8 && moved && still,
+             info: tiles + ' 块，相邻滑动了=' + moved + '，不相邻没动=' + still };
+  })()`);
+
+  await step('数字华容道：提示给的那块一定滑得动', `(function(){
+    const S = SD.Slide;
+    let bad = 0, checked = 0;
+    for (let k = 0; k < 4; k++) {
+      const b = S.app.getBoard();
+      const h = S.app.hint();
+      if (!h) continue;
+      checked++;
+      let idx = -1;
+      for (let i = 0; i < b.cells.length; i++) if (b.cells[i] === h.tile) { idx = i; break; }
+      if (idx < 0 || !S.canMove(b, idx)) bad++;
+    }
+    return { ok: bad === 0 && checked > 0, info: '验了 ' + checked + ' 次，滑不动 ' + bad + ' 次' };
+  })()`);
+
+  await step('数字华容道：自动解 3×3 能通关并结算', `(async function(){
+    const S = SD.Slide;
+    document.getElementById('btn-s-restart').click();
+    await new Promise(r => setTimeout(r, 400));
+    let guard = 0;
+    while (S.app.getBoard().state !== 'won' && guard++ < 220) {
+      const h = S.app.hint();
+      if (!h) break;
+      S.app.tap(h.tile);
+    }
+    await new Promise(r => setTimeout(r, 400));
+    const box = document.querySelector('#dialog-root .modal');
+    const title = box ? box.querySelector('h2').textContent : '';
+    const best = SD.Slide.store.best('n3');
+    const close = box ? box.querySelector('.modal-head .btn') : null;
+    if (close) close.click();
+    return { ok: /排好了/.test(title) && !!best,
+             info: '弹窗「' + title + '」，步数 ' + S.app.getBoard().moves + '，最佳记录 ' + (best ? best.moves + ' 步' : '无') };
+  })()`, 120000);
+
   /* ================= 导航 ================= */
 
   await step('从对局页能一路退回标题页换游戏', `(async function(){
@@ -1407,13 +1479,13 @@ async function main() {
     const atTitle = document.documentElement.getAttribute('data-view');
     const cards = document.querySelectorAll('.game-card').length;
     const clickable = Array.from(document.querySelectorAll('.game-card')).filter((c) => !c.classList.contains('is-soon')).length;
-    return { ok: atHome === 'home' && atTitle === 'title' && cards === 3 && clickable === 3,
+    return { ok: atHome === 'home' && atTitle === 'title' && cards === 4 && clickable === 4,
              info: '对局页 → ' + atHome + ' → ' + atTitle + '，标题页 ' + cards + ' 张卡片（' + clickable + ' 张可进入）' };
   })()`);
 
-  await step('三款游戏都能进能出', `(async function(){
+  await step('四款游戏都能进能出', `(async function(){
     const out = [];
-    for (const name of ['数独', '杀手数独', '扫雷']) {
+    for (const name of ['数独', '杀手数独', '扫雷', '数字华容道']) {
       const card = Array.from(document.querySelectorAll('.game-card'))
         .find((c) => c.querySelector('.gc-name').textContent === name);
       if (!card) { out.push(name + ':没有卡片'); continue; }
