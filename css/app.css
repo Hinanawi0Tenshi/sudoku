@@ -1561,7 +1561,7 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
   border-bottom: 1px solid var(--border);
 }
 .mcell.is-flag { background: var(--hint-soft); }
-.mcell.is-mine { background: color-mix(in srgb, var(--danger) 55%, var(--surface)); }
+.mcell.is-mine { background: var(--mine-open); }
 .mcell.is-boom { background: var(--danger); }
 .mcell.is-wrong-flag { background: var(--conflict); }
 .mc-flag { font-size: calc(var(--cell, 30px) * 0.6); }

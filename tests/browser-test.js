@@ -1165,10 +1165,20 @@ async function main() {
     const title = box ? box.querySelector('h2').textContent : '';
     const wrongMarked = document.querySelectorAll('.mine-grid .mcell.is-wrong-flag').length;
     const boom = document.querySelectorAll('.mine-grid .mcell.is-boom').length;
+    // 这条用例原来只数爆炸点和错旗，名字却写着「摊出全部雷」——雷压根没摊开也照样通过。
+    // 现在逐颗数：没插旗的雷必须全部摊出来，插对的旗保持原样。
+    const shown = document.querySelectorAll('.mine-grid .mcell.is-mine').length;
+    let total = 0, flagged = 0;
+    for (let i = 0; i < b.mine.length; i++) {
+      if (!b.mine[i]) continue;
+      total++;
+      if (b.flag[i]) flagged++;
+    }
     const close = box ? box.querySelector('.modal-head .btn') : null;
     if (close) close.click();
-    return { ok: /踩雷/.test(title) && boom === 1 && (wrongFlag < 0 || wrongMarked === 1),
-             info: '弹窗「' + title + '」，爆炸点 ' + boom + ' 个，标出的错旗 ' + wrongMarked + ' 面' };
+    return { ok: /踩雷/.test(title) && boom === 1 && (wrongFlag < 0 || wrongMarked === 1) && shown === total - flagged,
+             info: '弹窗「' + title + '」，爆炸点 ' + boom + ' 个，标出的错旗 ' + wrongMarked + ' 面，'
+               + '摊出的雷 ' + shown + '/' + (total - flagged) + ' 颗（共 ' + total + ' 颗，插对 ' + flagged + ' 面旗）' };
   })()`);
 
   await step('扫雷与数独的数据各存各的', `(function(){

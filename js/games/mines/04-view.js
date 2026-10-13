@@ -103,36 +103,41 @@
         safe: (hint && hint.safe) || [],
         suggest: (hint && hint.suggest) || [],
       };
-      const over = b.state === 'won' || b.state === 'lost';
+      const lost = b.state === 'lost';
 
       for (let i = 0; i < cells.length; i++) {
         const node = cells[i];
         const open = !!b.open[i];
+        // 踩雷之后把**没插旗的雷全部摊开**。原先只有玩家踩中的那一颗会翻开，
+        // 剩下的雷在哪全靠猜——结算文案却写着「雷也全部摊开了」，言行不一。
+        // 插对的旗保持原样（XP 也是这样），插错的旗标红。
+        const revealed = open || (lost && b.mine[i] && !b.flag[i]);
         let cls = 'mcell';
 
-        if (open) {
+        if (revealed) {
           cls += '.is-open';
           if (b.mine[i]) cls += '.is-mine';
           if (i === b.boom) cls += '.is-boom';
         } else if (b.flag[i]) {
           cls += '.is-flag';
           // 输了以后把插错的旗标出来，不然玩家不知道自己错在哪
-          if (over && !b.mine[i]) cls += '.is-wrong-flag';
+          if (lost && !b.mine[i]) cls += '.is-wrong-flag';
         }
 
-        if (!open && inSet(hintCells.ref, i)) cls += '.is-ref';
-        if (!open && inSet(hintCells.mine, i)) cls += '.is-elim';
-        if (!open && inSet(hintCells.safe, i)) cls += '.is-safe';
-        if (!open && inSet(hintCells.suggest, i)) cls += '.is-suggest';
+        if (!revealed && inSet(hintCells.ref, i)) cls += '.is-ref';
+        if (!revealed && inSet(hintCells.mine, i)) cls += '.is-elim';
+        if (!revealed && inSet(hintCells.safe, i)) cls += '.is-safe';
+        if (!revealed && inSet(hintCells.suggest, i)) cls += '.is-suggest';
 
         if (node.className !== cls.replace(/\./g, ' ').trim()) {
           node.className = cls.replace(/\./g, ' ').trim();
         }
 
-        const num = open && !b.mine[i] && b.num[i] > 0 ? String(b.num[i]) : '';
+        const num = revealed && !b.mine[i] && b.num[i] > 0 ? String(b.num[i]) : '';
         if (node._num.textContent !== num) node._num.textContent = num;
-        node.dataset.n = open && !b.mine[i] && b.num[i] > 0 ? String(b.num[i]) : '';
-        node._flag.textContent = (!open && b.flag[i]) || (open && b.mine[i] && b.state === 'lost') ? '🚩' : '';
+        node.dataset.n = revealed && !b.mine[i] && b.num[i] > 0 ? String(b.num[i]) : '';
+        // 摊开的雷画雷，没摊开的旗画旗
+        node._flag.textContent = revealed && b.mine[i] ? '💣' : (!revealed && b.flag[i] ? '🚩' : '');
       }
     }
 
