@@ -1662,7 +1662,7 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
  * 那两样已经被 3×3 宫分隔线、选中框、提示高亮占着了。
  */
 :root {
-  --cage-line: color-mix(in srgb, var(--text) 36%, transparent);
+  --cage-line: color-mix(in srgb, var(--text) 52%, transparent);
 }
 .cell::before {
   content: "";
@@ -1672,10 +1672,10 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
   border: 0 dashed var(--cage-line);
   z-index: 2;
 }
-.cell.cage-t::before { border-top-width: 1.5px; }
-.cell.cage-r::before { border-right-width: 1.5px; }
-.cell.cage-b::before { border-bottom-width: 1.5px; }
-.cell.cage-l::before { border-left-width: 1.5px; }
+.cell.cage-t::before { border-top-width: 2px; }
+.cell.cage-r::before { border-right-width: 2px; }
+.cell.cage-b::before { border-bottom-width: 2px; }
+.cell.cage-l::before { border-left-width: 2px; }
 .cell-cage {
   position: absolute;
   top: 1px;

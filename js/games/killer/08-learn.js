@@ -46,36 +46,42 @@
     },
   };
 
-  const cache = {};
-
   /**
-   * 找一局「目标技巧正好是当前该走的那一步」的局面。
-   * 用求解器自己打，所以局面是玩家真能走到的，不是硬凑的。
+   * 演示局面一次全找齐，而不是每个技巧各开一局。
+   *
+   * 原先每种技巧都要从零出题、再一局局试，六个技巧就是几十次出题——
+   * 浏览器里点开教程要等半分钟，测试直接超时。改成出几局、每局一路推下去，
+   * 途中遇到哪种技巧就把当时的局面记下来：一局的解法里本来就会经过好几种技巧。
    */
-  function findDemo(id) {
-    if (id in cache) return cache[id];
-    cache[id] = null;
-    const deadline = Date.now() + 1500;
-    for (let s = 0; s < 12; s++) {
+  let demos = null;
+
+  function collectDemos() {
+    if (demos) return demos;
+    demos = {};
+    const want = KT.LIST.length;
+    const deadline = Date.now() + 4000;
+    for (let s = 0; s < 6 && Object.keys(demos).length < want; s++) {
       if (Date.now() > deadline) break;
-      const gen = KG.generateSync(s < 6 ? 'hard' : 'expert', 'learn-' + id + '-' + s);
+      const gen = KG.generateSync(s % 2 ? 'hard' : 'medium', 'learn-set-' + s);
       const puz = gen.puzzle;
       const g = new Uint8Array(81);
       const state = KT.makeState(puz, g);
       const cand = state.cand;
       let guard = 0;
-      while (!SD.Validation.isComplete(g) && guard++ < 220 && Date.now() < deadline) {
+      while (!SD.Validation.isComplete(g) && guard++ < 240 && Date.now() < deadline) {
         const step = KT.findStepFrom(state, { maxLevel: 5 });
         if (!step) break;
-        if (step.id === id) {
-          cache[id] = { puz: puz, grid: g.slice(), step: step, difficulty: gen.difficultyName };
-          return cache[id];
+        if (!demos[step.id]) {
+          demos[step.id] = { puz: puz, grid: g.slice(), step: step, difficulty: gen.difficultyName };
         }
         SD.Techniques.commit(g, cand, step);
       }
     }
-    return null;
+    return demos;
   }
+
+  /** 取某种技巧的演示局面；找不到返回 null */
+  const findDemo = (id) => collectDemos()[id] || null;
 
   /** 只读演示盘面：不接受点击，笼子照画，这条推理涉及的格子高亮 */
   function demoBoard(demo) {

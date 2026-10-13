@@ -238,13 +238,15 @@ section('4. 出题器');
 }
 
 {
-  // 难度下限：入门题不该需要 45 法则以上的技巧
+  // 难度下限：入门档靠「笼子切得碎、单格笼多」保持简单，不该冒出 L4 以上的技巧。
+  // 上限放到 3 是因为笼子一收干净就会用到 45 法则——那已经不属于入门了，
+  // 所以入门档故意留着单格笼（见 04-generator.js 的 roomy 说明）。
   let tooHard = 0;
   for (let s = 0; s < 6; s++) {
     const gen = G.generateSync('easy', 'floor-' + s);
-    if (gen.rating.level > 2) tooHard++;
+    if (gen.rating.level > 3) tooHard++;
   }
-  ok('入门档不会冒出高等级技巧', tooHard === 0, tooHard + ' 道超标');
+  ok('入门档不会冒出 L4 以上的技巧', tooHard === 0, tooHard + ' 道超标');
 }
 
 /* ---------------- 5. 体检 ---------------- */

@@ -39,6 +39,27 @@
     return m;
   }
 
+  /**
+   * k 个数字、和为 s 时可能出现哪些数字——**允许重复**。
+   *
+   * 笼内格必须互不相同（笼子规则），但 45 法则算出来的「外格」是跨笼子的：
+   * 它们分属不同笼子，完全可以是同一个数字。用要求互不相同的组合表去过它们，
+   * 会把合法数字一并删掉——实测就删掉过真解。
+   */
+  function possibleAny(k, s) {
+    if (k <= 0) return 0;
+    let m = 0;
+    for (let d = 1; d <= N; d++) {
+      const rest = s - d;
+      if (k === 1) {
+        if (rest === 0) m |= B.bit(d);
+      } else if (rest >= k - 1 && rest <= N * (k - 1)) {
+        m |= B.bit(d);
+      }
+    }
+    return m;
+  }
+
   /** 哪些数字必定在笼子里（所有组合都含它）。用于向外排除。 */
   function required(k, s) {
     const list = k >= 0 && k <= N && s >= 0 && s <= 45 ? COMBOS[k][s] : null;
@@ -129,6 +150,7 @@
   K.cages = {
     COMBOS: COMBOS,
     possible: possible,
+    possibleAny: possibleAny,
     required: required,
     comboCount: comboCount,
     create: create,

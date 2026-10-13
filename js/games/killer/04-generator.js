@@ -29,12 +29,20 @@
    *   1-2 → 3ms/道，全是 L1；1-3 → 2ms，L2；1-4 → 22ms，L3；
    *   2-4 → 76ms，L3 但大笼子更多；2-4 要求必须试数 → 139ms，全是 L5。
    */
+  /**
+   * roomy —— 种子是否优先挑「还有未分配邻居」的格子。
+   *   开着：笼子能长起来，盘面干净、单格笼几乎为零（中等以上都开）。
+   *   关掉：按随机顺序切，靠后的格子长不出第二格，会留下一堆单格笼。
+   *         这恰恰是入门题该有的样子——单格笼等于白送一个数字，
+   *         整盘靠「笼内定数」就能推完，不会一上来就要 45 法则。
+   * absorb —— 收编单格笼时允许并进的笼子最大到几格。设 1 等于不收。
+   */
   const DIFFICULTY = {
-    easy:   { id: 'easy',   name: '入门', star: 1, sizeLo: 1, sizeHi: 2, minLevel: 1, minStar: 1 },
-    medium: { id: 'medium', name: '简单', star: 2, sizeLo: 1, sizeHi: 3, minLevel: 2, minStar: 2 },
-    hard:   { id: 'hard',   name: '中等', star: 3, sizeLo: 1, sizeHi: 4, minLevel: 3, minStar: 3 },
-    expert: { id: 'expert', name: '困难', star: 4, sizeLo: 2, sizeHi: 4, minLevel: 3, minStar: 3 },
-    master: { id: 'master', name: '大师', star: 5, sizeLo: 2, sizeHi: 4, minLevel: 5, minStar: 5 },
+    easy:   { id: 'easy',   name: '入门', star: 1, sizeLo: 1, sizeHi: 2, absorb: 1, roomy: 0,   minLevel: 1, minStar: 1 },
+    medium: { id: 'medium', name: '简单', star: 2, sizeLo: 1, sizeHi: 3, absorb: 3, roomy: 0.5, minLevel: 1, minStar: 1 },
+    hard:   { id: 'hard',   name: '中等', star: 3, sizeLo: 1, sizeHi: 3, absorb: 3, roomy: 1,   minLevel: 1, minStar: 1 },
+    expert: { id: 'expert', name: '困难', star: 4, sizeLo: 2, sizeHi: 3, absorb: 3, roomy: 1,   minLevel: 1, minStar: 1 },
+    master: { id: 'master', name: '大师', star: 5, sizeLo: 2, sizeHi: 3, absorb: 4, roomy: 1,   minLevel: 1, minStar: 1 },
   };
   const DIFFICULTY_ORDER = ['easy', 'medium', 'hard', 'expert', 'master'];
 
@@ -54,14 +62,33 @@
    * 把终盘切成笼子：从随机一个未分配的格子开始往外长，
    * 长出的大小落在 [sizeLo, sizeHi] 内，且笼内数字不能重复——
    * 笼子的规则本来就是「数字互不相同」，切的时候就不能切出重复的来。
+   *
+   * 种子不能随便挑。按固定随机顺序处理时，轮到靠后的格子，它的四邻早被分完了，
+   * 一格都长不出来，直接变成单格笼——实测 1-4 档平均每局 15.7 个单格笼，
+   * 整盘碎成一片，又难看又没意思。所以优先挑「还有未分配邻居」的格子当种子。
    */
   function partition(solution, rng, cfg) {
     const assigned = new Uint8Array(B.CELL_COUNT);
-    const order = U.shuffle(Array.from({ length: B.CELL_COUNT }, (_, i) => i), rng);
+    const pending = Array.from({ length: B.CELL_COUNT }, (_, i) => i);
     const span = cfg.sizeHi - cfg.sizeLo + 1;
     const list = [];
-    for (const seed of order) {
-      if (assigned[seed]) continue;
+
+    while (true) {
+      const free = [];
+      const roomy = [];
+      for (const i of pending) {
+        if (assigned[i]) continue;
+        free.push(i);
+        if (neighborsOf(i).some((j) => !assigned[j])) roomy.push(i);
+      }
+      if (!free.length) break;
+      // roomy 可以是 true/false，也可以是 0~1 的概率——中间档留一点碎笼当缓冲，
+      // 否则「简单」和「中等」之间会从 L2 直接跳到 L5，跨度大得不像同一套难度表。
+      const useRoomy = cfg.roomy === true
+        || (typeof cfg.roomy === 'number' && rng() < cfg.roomy);
+      const pool = useRoomy && roomy.length ? roomy : free;
+      const seed = pool[Math.floor(rng() * pool.length)];
+
       const cells = [seed];
       assigned[seed] = 1;
       const digits = new Set([solution[seed]]);
@@ -80,11 +107,54 @@
         digits.add(solution[pick]);
         cells.push(pick);
       }
-      let sum = 0;
-      for (const i of cells) sum += solution[i];
-      list.push({ cells: cells, sum: sum });
+      list.push({ cells: cells, sum: 0 });
     }
-    return list;
+
+    return absorbSingletons(list, solution, cfg, rng);
+  }
+
+  /**
+   * 收尾：把剩下的单格笼并进相邻的笼子。
+   * 长不出来的格子是少数，但单格笼在盘面上很扎眼（它就是白送一个数字），
+   * 正式杀手题里很少见。只要相邻笼子不含这个数字、又没到尺寸上限，就并进去。
+   */
+  function absorbSingletons(list, solution, cfg, rng) {
+    const of = new Int8Array(B.CELL_COUNT).fill(-1);
+    for (let k = 0; k < list.length; k++) for (const i of list[k].cells) of[i] = k;
+    const gone = new Uint8Array(list.length);
+
+    for (let k = 0; k < list.length; k++) {
+      if (gone[k] || list[k].cells.length !== 1) continue;
+      const i = list[k].cells[0];
+      const d = solution[i];
+      const opts = [];
+      for (const j of neighborsOf(i)) {
+        const t = of[j];
+        if (t < 0 || t === k || gone[t]) continue;
+        // absorb 是收编上限，通常比 sizeHi 宽一格：单格笼最常见的处境就是
+        // 「邻居都满了」，卡死在这只会让它留在盘面上扎眼。
+        // 但入门档故意收得紧——单格笼就是白送一个数字，正是入门题该有的样子。
+        if (list[t].cells.length > (cfg.absorb || cfg.sizeHi)) continue;
+        let clash = false;
+        for (const x of list[t].cells) if (solution[x] === d) { clash = true; break; }
+        if (!clash) opts.push(t);
+      }
+      if (!opts.length) continue;
+      const t = opts[Math.floor(rng() * opts.length)];
+      list[t].cells.push(i);
+      of[i] = t;
+      list[k].cells = [];
+      gone[k] = 1;
+    }
+
+    const out = [];
+    for (const c of list) {
+      if (!c.cells.length) continue;
+      let sum = 0;
+      for (const i of c.cells) sum += solution[i];
+      out.push({ cells: c.cells, sum: sum });
+    }
+    return out;
   }
 
   const MAX_ATTEMPTS = 400;
@@ -93,7 +163,7 @@
    * 与其让玩家对着「正在出题」干等，不如到点就用目前最好的一道，
    * 并且把**实测出来的**难度如实报出去（rating 是量出来的，不是标签）。
    */
-  const TIME_BUDGET_MS = 2500;
+  const TIME_BUDGET_MS = 1500;
 
   const randomSeed = () => Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 
@@ -110,7 +180,10 @@
     let hit = false;
 
     for (let k = 0; k < MAX_ATTEMPTS; k++) {
-      if (k > 0 && Date.now() > deadline) break;
+      // 先拿到一道唯一解的题，再谈时间预算。反过来的话，预算到点时手上空空，
+      // 只能抛「出题失败」——那比多等一两秒糟得多。笼子开大时唯一解率只有 5%，
+      // 试二十来次才撞到一道是常态。
+      if (fallback && Date.now() > deadline) break;
       attempts++;
       const solution = SD.Solver.randomFullGrid(rng);
       const list = partition(solution, rng, cfg);
@@ -119,11 +192,17 @@
       if (!KS.hasUnique(puz).unique) continue;
 
       const rating = KT.rate(puz);
-      if (!fallback || rating.score > fallback.rating.score) {
+      // 评级没跑完的题不当正式候选（半截数据会把难度阶梯带偏），
+      // 但留着当兜底——否则一个都没评完时会直接抛错，玩家看到的是「出题失败」。
+      if (!fallback || (!rating.timedOut && rating.score > fallback.rating.score)) {
         fallback = { puzzle: puz, solution: solution, rating: rating };
       }
-      // 达标就收工：等级够、星级也够
-      if (rating.solved && rating.level >= cfg.minLevel && rating.star >= cfg.minStar) {
+      // 达标就收工：等级够、星级也在区间内。
+      // 这里不看 rating.solved ——「必须试数」的题在星级上已经是 5，该不该收由 minStar / maxStar 管。
+      // maxStar 是给中低档用的：那些档位不该冒出「必须试数」的题（星级 5），
+      // 靠 minStar 表达不了「要 3 星但不要 5 星」。
+      if (!rating.timedOut && rating.level >= cfg.minLevel && rating.star >= cfg.minStar &&
+          (!cfg.maxStar || rating.star <= cfg.maxStar)) {
         fallback = { puzzle: puz, solution: solution, rating: rating };
         hit = true;
         break;

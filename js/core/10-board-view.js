@@ -72,12 +72,16 @@
     }
 
     const staticCls = new Array(B.CELL_COUNT).fill('');
+    // 相邻宫交替淡底：数独里是分辨 3×3 的锚点，但杀手盘面上它和笼子边框抢注意力——
+    // 一片深浅交替的色块看起来就像分组，反而让人看不清笼子到底怎么划的。
+    // 所以带笼子渲染时用不带底色的那一份，只留粗宫线。
+    const staticClsNoTint = new Array(B.CELL_COUNT).fill('');
     for (let i = 0; i < B.CELL_COUNT; i++) {
       let s = '';
       if (B.COL_OF[i] % 3 === 2 && B.COL_OF[i] !== 8) s += ' bx-end';
       if (B.ROW_OF[i] % 3 === 2 && B.ROW_OF[i] !== 8) s += ' by-end';
-      if (B.BOX_OF[i] % 2 === 1) s += ' box-alt';
-      staticCls[i] = s;
+      staticCls[i] = s + (B.BOX_OF[i] % 2 === 1 ? ' box-alt' : '');
+      staticClsNoTint[i] = s;
     }
 
     /**
@@ -97,6 +101,8 @@
       // 删候选的格子：红色。技巧盯着的格子：蓝色。两者含义不同，必须分开。
       const elimCells = u.hint ? new Set(u.hint.elimCells || []) : null;
       if (u.cages !== cageRef) buildCages(u.cages);
+      // 有笼子时不画宫底色，把注意力全留给笼子边框（见 staticClsNoTint 的说明）
+      const baseCls = u.cages ? staticClsNoTint : staticCls;
       // 选中哪一格，整个笼子一起点亮。杀手盘面上「这一格属于哪个笼子」
       // 是每一步都要看的信息，靠肉眼顺着虚线找太累。
       const selCage = u.cages && u.highlightCage && sel >= 0 ? u.cages.cageOf[sel] : -2;
@@ -138,7 +144,7 @@
         if (u.hintPlaced && u.hintPlaced.has(i)) cls += ' is-hint-value';
         if (refCells.has(i)) cls += ' is-ref';
         if (selCage >= -1 && u.cages.cageOf[i] === selCage && i !== sel) cls += ' is-cage';
-        c.className = 'cell' + staticCls[i] + cageCls[i] + cls;
+        c.className = 'cell' + baseCls[i] + cageCls[i] + cls;
         if (c._cage.textContent !== cageSum[i]) c._cage.textContent = cageSum[i];
 
         if (d) {

@@ -167,7 +167,7 @@
    *           Σ笼和 - 45 = Σ外格。
    * 两种都归结为「这几个格子的和是定值」，于是要么直接定数，要么按组合过滤候选。
    */
-  function sumStep(id, cells, need, cand, grid, detail) {
+  function sumStep(id, cells, need, cand, grid, detail, distinct) {
     // 一律先转成真数组。B.UNITS 里存的是 Int8Array，它的 filter/slice 返回的还是
     // Int8Array——而 Int8Array.prototype.map 会把返回的字符串强转成 0，
     // 于是讲解里的坐标全渲染成「0、0」。这个坑很隐蔽，是渲染出来才发现的。
@@ -185,7 +185,10 @@
       });
     }
     if (need < 1 || need > 45) return null;
-    const mask = C.possible(empty.length, need);
+    // 内格同属一个单元，数字必然互不相同；外格跨笼子，可以重复
+    const mask = distinct === false
+      ? C.possibleAny(empty.length, need)
+      : C.possible(empty.length, need);
     if (!mask) return null;
     const elims = [];
     for (const i of empty) {
@@ -281,7 +284,8 @@
         if (out.length > 4) continue;
         let need = sum - 45;
         for (const i of out) if (grid[i]) need -= grid[i];
-        const step = sumStep('outie', out, need, cand, grid, { unit: u, cages: used });
+        // 外格跨笼子，不要求互不相同
+        const step = sumStep('outie', out, need, cand, grid, { unit: u, cages: used }, false);
         if (step) {
           step.units = [u];
           return step;
@@ -445,19 +449,24 @@
    * 按等级上限反复推理，评估题目的「人类可解性」与难度构成。
    * 和数独那边的 simulate 同一套账：技巧天花板 + 瓶颈占比一起算难度。
    */
-  function simulate(puz, maxLevel, maxSteps) {
+  function simulate(puz, maxLevel, maxSteps, budgetMs) {
     const g = new Uint8Array(B.CELL_COUNT);
     const state = makeState(puz, g);
     const cand = state.cand;
     const used = {};
     const seen = new Set();
     const cap = maxSteps || 4000;
+    // 步数上限挡不住耗时：每一步都要跑一遍 branchCount（几十次技巧探测），
+    // 个别盘面会一路走到几千步，一次评级就吃掉几十秒。所以再加一道墙钟。
+    const deadline = Date.now() + (budgetMs || 400);
     let steps = 0;
     let level = 0;
     let contradiction = false;
     let bottlenecks = 0;
+    let timedOut = false;
 
     while (steps < cap) {
+      if (Date.now() > deadline) { timedOut = true; break; }
       if (SD.Validation.isComplete(g)) break;
       let starved = false;
       for (let i = 0; i < B.CELL_COUNT; i++) {
@@ -486,6 +495,7 @@
       used: used,
       level: level,
       bottlenecks: bottlenecks,
+      timedOut: timedOut,
       finalGrid: g,
     };
   }
@@ -505,8 +515,15 @@
   };
   const STAR_BREAK = [130, 280, 470, 800];
 
+  /**
+   * 评级用 L1–L4 量，把 cage-trial 排除在外。
+   *
+   * cage-trial 是个「用求解器兜底」的技巧，强到只要一用就必然通关。
+   * 把它算进等级的话，几乎所有题都会落到 L5——等级这一维就彻底没有分辨力了。
+   * 所以：等级 = 靠人类技巧能走到哪一级；「必须试数」单独作为最高一档。
+   */
   function rate(puz, maxLevel) {
-    const sim = simulate(puz, maxLevel || 5);
+    const sim = simulate(puz, maxLevel || 4, undefined, 400);
     let weight = 0;
     let total = 0;
     const breakdown = [];
@@ -527,14 +544,18 @@
     // 星级不走它——杀手一道题动辄几十步笼内定数，权重一累加就把 1 星题顶到 3 星，
     // 与玩家体感完全脱节。星级直接看「需要用到哪一级技巧」，瓶颈多再加一星。
     const score = level * 120 + Math.min(weight, 200) + shape + (sim.solved ? 0 : 900);
-    const star = sim.solved ? Math.min(5, level + (choke > 0.55 ? 1 : 0)) : 5;
+    const star = sim.solved ? Math.min(4, level + (choke > 0.55 ? 1 : 0)) : 5;
 
     return {
       solved: sim.solved,
+      // 评级没跑完（撞上时间预算）。这一档数字不可信，出题时应当跳过这道题。
+      timedOut: sim.timedOut,
+      // 靠 L1–L4 推不动，必须动用笼内试数
+      needsTrial: !sim.solved,
       contradiction: sim.contradiction,
       level: level,
-      levelName: sim.solved ? (SD.Techniques.LEVEL_NAME[level] || '基础') : '需试错',
-      star: sim.solved ? star : 5,
+      levelName: sim.solved ? (SD.Techniques.LEVEL_NAME[level] || '基础') : '需试数',
+      star: star,
       score: score,
       steps: sim.steps,
       total: total,
