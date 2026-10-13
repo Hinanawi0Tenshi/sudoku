@@ -268,6 +268,51 @@ section('5. 题面体检');
   ok('漏掉格子会被体检拦下', !G.inspect(missing).valid);
 }
 
+/* ---------------- 6. 教程演示局面 ---------------- */
+
+section('6. 教程的演示局面（离线生成的静态数据）');
+
+{
+  vm.runInThisContext(fs.readFileSync(path.join(ROOT, 'js/games/killer/08-demos.js'), 'utf8'), { filename: 'demos' });
+  const demos = SD.Killer.demos || {};
+  const ids = KT.LIST.map((t) => t.id);
+  const missing = ids.filter((id) => !demos[id]);
+  ok('六条笼子技巧都有演示局面', missing.length === 0, missing.join(', '));
+
+  // 演示局面是离线算好写死的数据。它必须真的成立：技巧在这个局面上能用，
+  // 而且它给出的结论和真解一致。生成脚本或引擎改动导致数据过期时，这里会立刻失败。
+  let bad = '';
+  let fired = 0;
+  for (const id of ids) {
+    const raw = demos[id];
+    if (!raw) continue;
+    const puz = C.create(raw.c.map((c) => ({ cells: c[0], sum: c[1] })));
+    const sol = new Uint8Array(81);
+    for (let i = 0; i < 81; i++) sol[i] = raw.sol.charCodeAt(i) - 48;
+    const grid = new Uint8Array(81);
+    for (let i = 0; i < 81; i++) grid[i] = raw.g.charCodeAt(i) - 48;
+
+    // 局面本身得是自洽的
+    if (KS.solve(puz, 1).count !== 1) { bad = id + ' 的演示题不是唯一解'; break; }
+
+    // 这条技巧在当前局面上必须真的能触发。候选数用存下来的那一份——
+    // 演示局面是「一路推到某一步」的中间态，光有盘面复现不出当时的候选。
+    const state = { grid: grid, cand: Int32Array.from(raw.k), puz: puz };
+    const step = KT.byId[id].find(state);
+    if (!step) { bad = id + ' 的演示局面上触发不了'; break; }
+    fired++;
+
+    // 存下来的那一步必须和真解一致
+    const stored = raw.s;
+    for (const p of stored.placements) if (sol[p.cell] !== p.digit) bad = id + ' 存下的结论填错了 ' + p.cell;
+    if (bad) break;
+    for (const e of stored.eliminations) if (sol[e.cell] === e.digit) bad = id + ' 存下的结论删掉了真解 ' + e.cell;
+    if (bad) break;
+  }
+  ok('每个演示局面都能触发对应技巧，且结论与真解一致', !bad, bad);
+  console.log('  ' + fired + '/' + ids.length + ' 条技巧的演示局面验证通过');
+}
+
 /* ---------------- 汇总 ---------------- */
 
 console.log('\n' + '='.repeat(32));

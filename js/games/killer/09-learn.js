@@ -10,7 +10,6 @@
   const K = (SD.Killer = SD.Killer || {});
   const B = SD.Base;
   const { el, clear } = SD.UI;
-  const KG = K.generator;
   const KT = K.techniques;
 
   const TEXT = {
@@ -47,57 +46,31 @@
   };
 
   /**
-   * 演示局面一次全找齐，而不是每个技巧各开一局。
+   * 演示局面是**离线算好的静态数据**（见 08-demos.js 和 tests/build-killer-demos.js）。
    *
-   * 原先每种技巧都要从零出题、再一局局试，六个技巧就是几十次出题——
-   * 浏览器里点开教程要等半分钟，测试直接超时。改成出几局、每局一路推下去，
-   * 途中遇到哪种技巧就把当时的局面记下来：一局的解法里本来就会经过好几种技巧。
+   * 原先在浏览器里现算：出题、一局局推下去、逐个技巧找局面，点开教程要等好几秒。
+   * 但这些局面跟玩家、跟时间都没关系——同一份数据对所有人都成立，
+   * 那就不该让每个玩家各算一遍。现在点开是瞬时的。
    */
-  let demos = null;
+  const cache = {};
 
-  function collectDemos() {
-    if (demos) return demos;
-    demos = {};
-    const want = KT.LIST.length;
-    // 预算卡紧一点：出题本身耗时波动很大（0.1 秒到 3 秒），放太松会让点开教程
-    // 变成一次几秒到几十秒的等待。找不到的那几条会显示「没能构造出示例」，比卡住强。
-    const deadline = Date.now() + 2000;
-    // 一局通常就能覆盖全部六条：一局的解法里本来就会依次经过好几种技巧。
-    for (let s = 0; s < 1 && Object.keys(demos).length < want; s++) {
-      if (Date.now() > deadline) break;
-      const gen = KG.generateSync('medium', 'learn-set-' + s);
-      const puz = gen.puzzle;
-      const g = new Uint8Array(81);
-      const state = KT.makeState(puz, g);
-      const cand = state.cand;
-      // 一路只用 L1–L4 推。含 cage-trial 的完整引擎每步都要跑十几次求解，
-      // 一路推下来要几十秒；而 cage-trial 只在「别的都推不动」时才出场，
-      // 所以推到底之后再单独问它一次就够了。
-      let guard = 0;
-      while (!SD.Validation.isComplete(g) && guard++ < 200 && Date.now() < deadline) {
-        const step = KT.findStepFrom(state, { maxLevel: 4 });
-        if (!step) break;
-        if (!demos[step.id]) {
-          demos[step.id] = { puz: puz, grid: g.slice(), step: step, difficulty: gen.difficultyName };
-        }
-        SD.Techniques.commit(g, cand, step);
-      }
-      if (!demos['cage-trial'] && Date.now() < deadline) {
-        const trial = KT.byId['cage-trial'].find(state);
-        if (trial) {
-          demos['cage-trial'] = {
-            puz: puz, grid: g.slice(),
-            step: SD.Techniques.decorate(KT.byId['cage-trial'], trial),
-            difficulty: gen.difficultyName,
-          };
-        }
-      }
-    }
-    return demos;
+  /** 取某种技巧的演示局面；数据里没有就返回 null */
+  function findDemo(id) {
+    if (id in cache) return cache[id];
+    const raw = K.demos && K.demos[id];
+    if (!raw) { cache[id] = null; return null; }
+    const puz = K.cages.create(raw.c.map((c) => ({ cells: c[0], sum: c[1] })));
+    const grid = new Uint8Array(81);
+    for (let i = 0; i < 81; i++) grid[i] = raw.g.charCodeAt(i) - 48;
+    cache[id] = {
+      puz: puz,
+      grid: grid,
+      // decorate 会补回 name / level / tagline / cells / elimCells
+      step: SD.Techniques.decorate(KT.byId[raw.s.id], Object.assign({}, raw.s)),
+      difficulty: raw.d,
+    };
+    return cache[id];
   }
-
-  /** 取某种技巧的演示局面；找不到返回 null */
-  const findDemo = (id) => collectDemos()[id] || null;
 
   /** 只读演示盘面：不接受点击，笼子照画，这条推理涉及的格子高亮 */
   function demoBoard(demo) {

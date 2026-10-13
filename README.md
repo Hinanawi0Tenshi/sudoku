@@ -268,8 +268,13 @@
 用组合数一次算掉，不需要也不应该一个个枚举（480 格穷举是 10^144 量级）。
 
 ### 教程
-九种技巧各配一个当场能触发的演示盘面。演示局面是求解器自己打出来的真实对局
-（少数几条在随机对局里太罕见，用手工摆的局面），所以不会出现「图上画的和实际对不上」。
+六条笼子技巧各配一个当场能触发的演示盘面。演示局面是求解器自己打出来的真实对局，
+所以不会出现「图上画的和实际对不上」。
+
+这些局面是**离线算好、当静态数据发出去的**（js/games/killer/08-demos.js，由
+tests/build-killer-demos.js 生成）。它们跟玩家、跟时间都没关系，同一份数据对所有人都成立——
+原先在浏览器里现算，点开教程要等好几秒，现在展开是瞬时的。
+单测里有一条会逐个验证这些局面仍然成立（技巧触发得了、结论和真解一致），数据过期会立刻失败。
 
 ### 每日挑战
 难度固定中级，**整张图完全由日期决定**。普通对局的首点是玩家自己点的，
@@ -385,7 +390,7 @@ node tests/ocr-test.js
 # 5. 扫雷核心与求解器（30 项，纯 Node）
 node tests/mines-test.js
 
-# 6. 杀手数独核心与技巧引擎（25 项，纯 Node）
+# 6. 杀手数独核心与技巧引擎（27 项，纯 Node）
 node tests/killer-test.js
 
 # 7. 出题质量（终盘重复 / 难度下限 / 种子确定性 / 每日挑战确定性，纯 Node）
@@ -394,12 +399,15 @@ node tests/verify-gen.js
 # 8. 视觉回归截图
 node tests/shot-arch.js
 
-# 9. 线上部署校验（发布完跑一遍）
+# 9. 重新生成杀手数独的教程演示局面（改了出题逻辑才需要跑，纯 Node）
+node tests/build-killer-demos.js
+
+# 10. 线上部署校验（发布完跑一遍）
 node tests/verify-live.js
 ```
 
 2、4、8 需要 Edge/Chrome 和一个跑着的本地服务（双击 `启动数独.cmd` 即可）。
-1、3、5、6、7、9 是纯 Node，直接跑。
+1、3、5、6、7、9、10 是纯 Node，直接跑。
 
 核心引擎测试里最重要的是一条**性质测试**：从随机局面上把每一种技巧跑一遍，
 要求它给出的每一个落子和每一个候选消除，都必须和机器求解出的真实答案一致。
@@ -500,7 +508,7 @@ Tesseract 会把相邻的数字合并成一个 word，按词中心定位必然�
 ```powershell
 node tests/run-core-tests.js   # 数独核心逻辑 125 项断言，纯 Node
 node tests/mines-test.js       # 扫雷核心与求解器 30 项，纯 Node
-node tests/killer-test.js      # 杀手数独核心与技巧引擎 25 项，纯 Node
+node tests/killer-test.js      # 杀手数独核心与技巧引擎 27 项，纯 Node
 node tests/detect-test.js      # 网格自动定位的 7 个场景
 node tests/verify-gen.js       # 出题质量，纯 Node
 node tests/browser-test.js     # 真实浏览器冒烟 73 项，需要本地服务在线
