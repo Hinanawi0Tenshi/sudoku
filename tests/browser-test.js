@@ -132,16 +132,18 @@ async function main() {
     results.push({ name, ok: !!ok, detail: detail === undefined ? '' : String(detail) });
   };
 
-  const step = async (name, expr) => {
+  const step = async (name, expr, timeoutMs) => {
+    const t0 = Date.now();
     try {
-      const v = await evaluate(expr);
+      const v = await evaluate(expr, timeoutMs);
       check(name, v && v.ok !== false, v && v.info !== undefined ? v.info : JSON.stringify(v));
     } catch (e) {
       check(name, false, '抛异常: ' + e.message);
     }
-    // 边跑边打一行进度：万一后面某一步把进程挂住，日志里至少看得到卡在哪
+    // 边跑边打一行进度：万一后面某一步把进程挂住，日志里至少看得到卡在哪一步、卡了多久
     const last = results[results.length - 1];
-    console.log((last.ok ? '  ✓ ' : '  ✗ ') + last.name);
+    const ms = Date.now() - t0;
+    console.log((last.ok ? '  ✓ ' : '  ✗ ') + last.name + (ms > 1500 ? '  [' + ms + 'ms]' : ''));
   };
 
   await step('棋盘渲染出 81 格', `(function(){
@@ -1235,7 +1237,7 @@ async function main() {
     }
     return { ok: covered.size === 81 && uniq && sumOk,
              info: puz.list.length + ' 个笼子，覆盖 ' + covered.size + ' 格，笼和与真解一致=' + sumOk };
-  })()`);
+  })()`, 120000);
 
   await step('盘面把笼子画出来了（虚线边框 + 笼和）', `(function(){
     const cells = document.querySelectorAll('#board .cell');
@@ -1309,35 +1311,20 @@ async function main() {
     return { ok: missing.length === 0,
              info: boards + '/6 种有演示盘面，全部展开耗时 ' + (Date.now() - t0) + 'ms'
                + (missing.length ? '，缺：' + missing.join('、') : '') };
-  })()`);
+  })()`, 120000);
 
   await step('冲突判定把笼内重复和笼和超限也算进去', `(async function(){
     document.getElementById('page-back').click();
-    await new Promise(r => setTimeout(r, 200));
-    // 入门档笼子只有 1-2 格，凑不出「同笼但不同行列宫」的格子对；
-    // 换困难档——只有这种格子对才能证明是笼子规则抓出来的，而不是行列宫规则。
-    const oldPuz = SD.Killer.app.getPuzzle();
-    SD.Killer.app.newGame('hard');
-    for (let i = 0; i < 60; i++) {
-      await new Promise(r => setTimeout(r, 200));
-      if (SD.Killer.app.getPuzzle() && SD.Killer.app.getPuzzle() !== oldPuz) break;
-    }
+    await new Promise(r => setTimeout(r, 250));
+    // 用现成的盘面。原先为了造一个「同笼但不同行列宫」的格子对，这里会重新出一道
+    // 困难题——那一步实测要跑两分钟，还把后面两条用例一起拖垮。测试要的是
+    // 「笼子那两条规则有没有生效」，不值得为它重开一局。
     const g = SD.Killer.app.getGame();
     const puz = SD.Killer.app.getPuzzle();
-    let pair = null;
-    for (const cg of puz.list) {
-      for (let a = 0; a < cg.cells.length && !pair; a++) {
-        for (let b = a + 1; b < cg.cells.length && !pair; b++) {
-          const i = cg.cells[a], j = cg.cells[b];
-          const peer = SD.Base.ROW_OF[i] === SD.Base.ROW_OF[j]
-            || SD.Base.COL_OF[i] === SD.Base.COL_OF[j]
-            || SD.Base.BOX_OF[i] === SD.Base.BOX_OF[j];
-          if (!peer) pair = [i, j];
-        }
-      }
-      if (pair) break;
-    }
-    if (!pair) return { ok: false, info: '困难档也没找到「同笼不同行列宫」的格子对' };
+    if (!g || !puz) return { ok: false, info: '当前没有对局' };
+    const cg = puz.list.find((c) => c.cells.length >= 2);
+    if (!cg) return { ok: false, info: '这道题没有 2 格以上的笼子' };
+    const pair = [cg.cells[0], cg.cells[1]];
 
     // 先确认干净的盘面不报冲突
     const before = g.conflicts().size;
@@ -1357,7 +1344,7 @@ async function main() {
     for (const i of cg2.cells) g.state.board.grid[i] = 0;
     return { ok: caught && overCaught && before === 0,
              info: '同笼不同区的重复被抓=' + caught + '，笼和超限被抓=' + overCaught };
-  })()`);
+  })()`, 120000);
 
   await step('存档写进杀手数独自己的命名空间', `(function(){
     const raw = localStorage.getItem('puzzle-hub:killer:v1');

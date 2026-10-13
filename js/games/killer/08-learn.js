@@ -59,22 +59,38 @@
     if (demos) return demos;
     demos = {};
     const want = KT.LIST.length;
-    const deadline = Date.now() + 4000;
-    for (let s = 0; s < 6 && Object.keys(demos).length < want; s++) {
+    // 预算卡紧一点：出题本身耗时波动很大（0.1 秒到 3 秒），放太松会让点开教程
+    // 变成一次几秒到几十秒的等待。找不到的那几条会显示「没能构造出示例」，比卡住强。
+    const deadline = Date.now() + 2000;
+    // 一局通常就能覆盖全部六条：一局的解法里本来就会依次经过好几种技巧。
+    for (let s = 0; s < 1 && Object.keys(demos).length < want; s++) {
       if (Date.now() > deadline) break;
-      const gen = KG.generateSync(s % 2 ? 'hard' : 'medium', 'learn-set-' + s);
+      const gen = KG.generateSync('medium', 'learn-set-' + s);
       const puz = gen.puzzle;
       const g = new Uint8Array(81);
       const state = KT.makeState(puz, g);
       const cand = state.cand;
+      // 一路只用 L1–L4 推。含 cage-trial 的完整引擎每步都要跑十几次求解，
+      // 一路推下来要几十秒；而 cage-trial 只在「别的都推不动」时才出场，
+      // 所以推到底之后再单独问它一次就够了。
       let guard = 0;
-      while (!SD.Validation.isComplete(g) && guard++ < 240 && Date.now() < deadline) {
-        const step = KT.findStepFrom(state, { maxLevel: 5 });
+      while (!SD.Validation.isComplete(g) && guard++ < 200 && Date.now() < deadline) {
+        const step = KT.findStepFrom(state, { maxLevel: 4 });
         if (!step) break;
         if (!demos[step.id]) {
           demos[step.id] = { puz: puz, grid: g.slice(), step: step, difficulty: gen.difficultyName };
         }
         SD.Techniques.commit(g, cand, step);
+      }
+      if (!demos['cage-trial'] && Date.now() < deadline) {
+        const trial = KT.byId['cage-trial'].find(state);
+        if (trial) {
+          demos['cage-trial'] = {
+            puz: puz, grid: g.slice(),
+            step: SD.Techniques.decorate(KT.byId['cage-trial'], trial),
+            difficulty: gen.difficultyName,
+          };
+        }
       }
     }
     return demos;

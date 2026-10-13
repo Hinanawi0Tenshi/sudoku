@@ -17,7 +17,7 @@
    * 实测最长一次跑了 2800 万个节点、几分钟。出题时一个病态盘面就能把页面冻死，
    * 所以宁可到点收工、把这一盘判成「没验出唯一解」换个切法重来。
    */
-  const NODE_LIMIT = 400000;
+  const NODE_LIMIT = 120000;
 
   /**
    * @param {object} puz   K.cages.create(...) 的产物

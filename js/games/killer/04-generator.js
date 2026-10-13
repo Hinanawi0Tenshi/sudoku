@@ -159,6 +159,11 @@
 
   const MAX_ATTEMPTS = 400;
   /**
+   * 单轮尝试的次数上限。笼子开大时唯一解率只有个位数百分比，死磕下去可能几分钟
+   * 都撞不到一道——与其如此，不如早点放弃这一轮、换更小的笼子重来（那几乎必成）。
+   */
+  const ATTEMPT_LIMIT = 15;
+  /**
    * 出题时间预算。笼子开大之后唯一解会变稀有，偶尔会连切几百次都不达标——
    * 与其让玩家对着「正在出题」干等，不如到点就用目前最好的一道，
    * 并且把**实测出来的**难度如实报出去（rating 是量出来的，不是标签）。
@@ -168,12 +173,11 @@
   const randomSeed = () => Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 
   /**
-   * @param {string} difficultyId
-   * @param {string|number} [seed] 传了就完全可复现（每日挑战靠它）
+   * 一轮尝试：在给定笼子范围里切，直到切出一道达标的题。
+   * 找不到就返回 null，由上层收窄范围重来。
    */
-  function generateSync(difficultyId, seed) {
-    const cfg = DIFFICULTY[difficultyId] || DIFFICULTY.medium;
-    const rng = U.makeRng(seed === undefined || seed === null ? randomSeed() : String(seed));
+  function attempt(cfg, range, seed, hardDeadline) {
+    const rng = U.makeRng(seed);
     const deadline = Date.now() + TIME_BUDGET_MS;
     let fallback = null;
     let attempts = 0;
@@ -183,10 +187,15 @@
       // 先拿到一道唯一解的题，再谈时间预算。反过来的话，预算到点时手上空空，
       // 只能抛「出题失败」——那比多等一两秒糟得多。笼子开大时唯一解率只有 5%，
       // 试二十来次才撞到一道是常态。
+      // 硬上限必须在这里也查一遍。只放在外层的话，一次 attempt 最多能跑
+      // ATTEMPT_LIMIT 次求解（每次可能一秒），加起来几十秒——实测就是它把
+      // 教程的演示搜索拖到了 48 秒。
+      if (Date.now() > hardDeadline) break;
       if (fallback && Date.now() > deadline) break;
+      if (!fallback && k >= ATTEMPT_LIMIT) break;
       attempts++;
       const solution = SD.Solver.randomFullGrid(rng);
-      const list = partition(solution, rng, cfg);
+      const list = partition(solution, rng, range);
       const puz = C.create(list);
       if (KS.validateShape(puz)) continue;
       if (!KS.hasUnique(puz).unique) continue;
@@ -209,10 +218,7 @@
       }
     }
 
-    if (!fallback) {
-      // 连一次唯一解都没切出来。笼子开得太大时会走到这里，报出来比静默返回 null 好。
-      throw new Error('没能切出唯一解的笼子（' + attempts + ' 次尝试）');
-    }
+    if (!fallback) return null;
     return {
       puzzle: fallback.puzzle,
       cages: fallback.puzzle.list,
@@ -226,7 +232,38 @@
       // UI 会按 rating 报实际难度，不会拿档位标签糊弄人。
       hitTarget: hit,
       seed: seed === undefined || seed === null ? null : String(seed),
+      sizeLo: range.sizeLo,
+      sizeHi: range.sizeHi,
     };
+  }
+
+  /**
+   * @param {string} difficultyId
+   * @param {string|number} [seed] 传了就完全可复现（每日挑战靠它）
+   *
+   * 笼子越大越难切出唯一解（实测 2 格笼 83%、5 格笼 20%、6 格笼 0%）。
+   * 目标范围切不出来时**逐级收窄笼子尺寸**再试，保证一定能出题——
+   * 宁可这一局的笼子比目标小一档，也不要让玩家对着「出题失败」发呆，
+   * 或者对着「正在出题」等上几分钟。收窄后的实际尺寸会随结果一起返回。
+   */
+  function generateSync(difficultyId, seed) {
+    const cfg = DIFFICULTY[difficultyId] || DIFFICULTY.medium;
+    const base = seed === undefined || seed === null ? randomSeed() : String(seed);
+    // 整轮出题的硬上限：收窄到 2 格笼时唯一解率 85%，几乎必成，
+    // 所以正常情况下走不到这个上限；留它是为了防止任何没预料到的组合把页面冻住。
+    const hardDeadline = Date.now() + 4000;
+    for (let hi = cfg.sizeHi; hi >= 2; hi--) {
+      if (Date.now() > hardDeadline) break;
+      const range = {
+        sizeLo: Math.min(cfg.sizeLo, hi),
+        sizeHi: hi,
+        roomy: cfg.roomy,
+        absorb: Math.min(cfg.absorb, hi + 1),
+      };
+      const got = attempt(cfg, range, base + '|' + hi, hardDeadline);
+      if (got) return got;
+    }
+    throw new Error('没能切出唯一解的笼子');
   }
 
   /** 题面体检：笼子切得对不对、唯一不唯一 */
