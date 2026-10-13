@@ -32,6 +32,15 @@
   --hint-soft: #fff4d6;
   /* 技巧高亮：蓝底表示「这格是技巧盯着的」，红底表示「这格要删候选」 */
   --tech-soft: #e3eeff;
+  --safe-soft: color-mix(in srgb, var(--good) 16%, var(--surface));
+
+  /* 扫雷：未扫格是凸起的按钮，已扫格压平。XP / Win7 扫雷就靠这个斜面区分状态——
+     只靠底色深浅（surface-2 vs surface）根本分不出来。
+     这里用 var() 组合出来，所以 7 套主题自动都成立。 */
+  --mine-face: color-mix(in srgb, var(--surface) 76%, var(--text));
+  --mine-hi: color-mix(in srgb, var(--surface) 55%, #fff);
+  --mine-lo: color-mix(in srgb, var(--surface) 40%, #000);
+  --mine-open: var(--surface);
 
   --radius: 12px;
   --radius-sm: 8px;
@@ -1516,12 +1525,14 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
   display: grid;
   grid-template-columns: repeat(var(--mw), var(--cell, 30px));
   grid-auto-rows: var(--cell, 30px);
-  gap: 1px;
+  /* 不留缝：XP 扫雷的未扫格是连成一片的按钮，留缝会把它切成一块块小方砖 */
+  gap: 0;
   width: max-content;
   margin: 0 auto;
-  padding: 1px;
-  background: var(--border-strong);
+  background: var(--mine-open);
+  border: 1px solid var(--border-strong);
   border-radius: 4px;
+  overflow: hidden;
   user-select: none;
   -webkit-user-select: none;
   touch-action: manipulation;
@@ -1530,16 +1541,25 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
   position: relative;
   display: grid;
   place-items: center;
-  background: var(--surface-2);
+  background: var(--mine-face);
   font-weight: 700;
   font-size: calc(var(--cell, 30px) * 0.58);
   line-height: 1;
   cursor: pointer;
-  /* 未翻开的格子做出凸起感，翻开的按下去——扫雷全靠这个区分状态 */
-  box-shadow: inset 1px 1px 0 color-mix(in srgb, #fff 55%, transparent),
-              inset -1px -1px 0 color-mix(in srgb, #000 14%, transparent);
+  /* XP / Win7 扫雷的 3D 斜面：左上 2px 高光、右下 2px 阴影。
+     这是分辨「扫没扫过」的主要依据，比底色深浅可靠得多。 */
+  box-shadow:
+    inset 2px 2px 0 var(--mine-hi),
+    inset -2px -2px 0 var(--mine-lo);
 }
-.mcell.is-open { background: var(--surface); cursor: default; box-shadow: none; }
+/* 已翻开的格子压平，只留一条细网格线——和凸起的按钮形成明确对比 */
+.mcell.is-open {
+  background: var(--mine-open);
+  cursor: default;
+  box-shadow: none;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
 .mcell.is-flag { background: var(--hint-soft); }
 .mcell.is-mine { background: color-mix(in srgb, var(--danger) 55%, var(--surface)); }
 .mcell.is-boom { background: var(--danger); }
@@ -1557,10 +1577,10 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .mcell[data-n="8"] .mc-num { color: #6b7280; }
 
 /* 提示高亮：蓝=这一步的依据，红=判为雷，绿=判为安全，黄=只是建议 */
-.mcell.is-ref { background: var(--tech-soft); box-shadow: inset 0 0 0 2px var(--accent); }
-.mcell.is-elim { background: var(--conflict); box-shadow: inset 0 0 0 2px var(--danger); }
-.mcell.is-safe { background: var(--safe-soft); box-shadow: inset 0 0 0 2px var(--good); }
-.mcell.is-suggest { background: var(--hint-soft); box-shadow: inset 0 0 0 2px var(--hint); }
+.mcell.is-ref { background: var(--tech-soft); outline: 2px solid var(--accent); outline-offset: -2px; }
+.mcell.is-elim { background: var(--conflict); outline: 2px solid var(--danger); outline-offset: -2px; }
+.mcell.is-safe { background: var(--safe-soft); outline: 2px solid var(--good); outline-offset: -2px; }
+.mcell.is-suggest { background: var(--hint-soft); outline: 2px solid var(--hint); outline-offset: -2px; }
 
 /* 高级档 30 列要更宽的一列，不然盘面一直在横向滚动 */
 [data-game="mines"] .layout { grid-template-columns: minmax(320px, 940px); }
