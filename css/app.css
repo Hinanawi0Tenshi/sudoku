@@ -1667,7 +1667,9 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .cell::before {
   content: "";
   position: absolute;
-  inset: 0;
+  /* 内缩一圈：笼子虚线缩在格子里画，和格子线、九宫格粗线之间留出一道缝。
+     贴着格子边画的话三者会叠成一条，根本分不清哪条是哪条。 */
+  inset: 2px;
   pointer-events: none;
   border: 0 dashed var(--cage-line);
   z-index: 2;

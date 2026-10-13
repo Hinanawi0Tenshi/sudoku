@@ -55,10 +55,13 @@
         const r = B.ROW_OF[i];
         const c = B.COL_OF[i];
         let s = '';
+        // 每条笼边只画一次，统一画在「下 / 右」那一格的上边和左边。
+        // 相邻两格各画一条的话，虚线内缩之后会变成两条平行线，反而更花。
+        // 外圈四条边仍然由最外那圈格子补上。
         if (r === 0 || of[i - 9] !== of[i]) s += ' cage-t';
-        if (r === 8 || of[i + 9] !== of[i]) s += ' cage-b';
         if (c === 0 || of[i - 1] !== of[i]) s += ' cage-l';
-        if (c === 8 || of[i + 1] !== of[i]) s += ' cage-r';
+        if (r === 8) s += ' cage-b';
+        if (c === 8) s += ' cage-r';
         cageCls[i] = s;
       }
       for (const cg of cages.list || []) {
