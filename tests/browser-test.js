@@ -1583,35 +1583,34 @@ async function main() {
              info: pieces + ' 块，曹操 ' + cao.w + '×' + cao.h + '，离出口 ' + d + ' 步' };
   })()`, 120000);
 
-  await step('华容道：出口框标在正确位置且永远盖在最上层', `(function(){
+  // 出口 = 底墙上的缺口，开在**棋盘外面**，所以永远不会被棋子挡住。
+  // （早先画成 2×2 的虚线框，压在棋子上既别扭，标的又是"曹操要占的位置"而不是出口。）
+  await step('华容道：出口是底墙上的缺口，且在棋盘外面', `(function(){
     const K = SD.Klotski;
     const b = K.app.getBoard();
-    const frame = document.querySelector('.k-exit-frame');
-    const fill = document.querySelector('.k-exit');
-    if (!frame || !fill) return { ok: false, info: '没有出口元素' };
+    const wall = document.querySelector('.k-wall');
+    const gap = document.querySelector('.k-gap');
+    if (!wall || !gap) return { ok: false, info: '没有底墙或缺口' };
     const board = document.querySelector('.k-board');
     const br = board.getBoundingClientRect();
-    const fr = frame.getBoundingClientRect();
-    // 出口是曹操要落到的 2×2（左上角 (3,1)）
+    const gr = gap.getBoundingClientRect();
     const cell = br.width / 4;
-    const dx = Math.abs((fr.left - br.left) - cell);
-    const dy = Math.abs((fr.top - br.top) - 3 * cell);
-    // 框比"两格"略小是刻意的（每块棋子四周留了缝），所以这里放到 8px 容差
-    const sizeOk = Math.abs(fr.width - 2 * cell) < 8 && Math.abs(fr.height - 2 * cell) < 8;
-    // z-index 必须高过棋子，否则曹操一挪过来就把标记挡住了
-    const zFrame = Number(getComputedStyle(frame).zIndex);
-    const zPiece = Number(getComputedStyle(document.querySelector('.k-piece')).zIndex) || 0;
-    const onTop = zFrame > zPiece;
-    // 曹操在出口时框要变绿
-    const before = frame.className;
+    // 缺口应该在第 2、3 列（1-based），也就是从 1 格宽处开始、宽约 2 格
+    const dx = Math.abs((gr.left - br.left) - cell);
+    const sizeOk = Math.abs(gr.width - 2 * cell) < 10;
+    // 缺口顶边必须在棋盘"五格高"的位置上——也就是在棋盘外面，不会被棋子压住
+    const outside = gr.top - br.top >= 5 * cell - 2;
+    const inBoard = gr.bottom <= br.bottom + 1;
+    // 曹操落位后缺口变绿
     const p = b.pieces[0];
     const saved = { r: p.r, c: p.c };
     p.r = 3; p.c = 1; K.rebuild(b); K.app.render();
-    const opened = document.querySelector('.k-exit-frame').classList.contains('is-open');
+    const opened = document.querySelector('.k-gap').classList.contains('is-open');
     p.r = saved.r; p.c = saved.c; K.rebuild(b); K.app.render();
-    return { ok: dx < 4 && dy < 4 && sizeOk && onTop && opened,
-             info: '偏移 ' + Math.round(dx) + ',' + Math.round(dy) + 'px，尺寸对=' + sizeOk
-               + '，z=' + zFrame + '（棋子 ' + zPiece + '），落位变色=' + opened };
+    const closed = document.querySelector('.k-gap').classList.contains('is-open');
+    return { ok: dx < 4 && sizeOk && outside && inBoard && opened && !closed,
+             info: '偏移 ' + Math.round(dx) + 'px，宽 ' + Math.round(gr.width) + '（两格 ' + Math.round(2*cell) + '）'
+               + '，在棋盘外=' + outside + '，落位变绿=' + opened + '，复位后恢复=' + !closed };
   })()`);
 
   await step('华容道：提示走完剩余距离正好减一', `(function(){

@@ -17,35 +17,35 @@
     const box = el('div.k-board');
     root.appendChild(box);
     let cell = 80;
+    let wallH = 26;
     let els = [];
-    let exitFill = null;
-    let exitFrame = null;
+    let wallEl = null;
+    let gapEl = null;
     let onPick = null;
 
     function fit() {
       // 不量父元素：盘面撑开父元素，量到的是循环依赖。按视口算，尺寸稳定。
       const avail = Math.min(MAX_W, Math.max(200, window.innerWidth - 48));
       cell = Math.floor(avail / K.W);
+      wallH = Math.max(18, Math.round(cell * 0.32));
       box.style.width = cell * K.W + 'px';
-      box.style.height = cell * K.H + 'px';
+      box.style.height = (cell * K.H + wallH) + 'px';
       box.style.setProperty('--kcell', cell + 'px');
     }
 
     function place(b) {
       const size = cell - PAD * 2;
       // 出口：曹操要落到的 2×2 位置（左上角在 (3,1)）
-      if (exitFill) {
+      // 出口 = 底墙上的一个缺口。曹操落位后缺口亮起来。
+      // 不再画 2×2 的虚线框——那个框标的是"曹操要占的位置"，压在棋子上既别扭，
+      // 也容易让人以为那是出口本身。
+      if (gapEl) {
         const w = 2 * cell - PAD * 2;
-        const h = 2 * cell - PAD * 2;
-        const tf = 'translate(' + (1 * cell + PAD) + 'px,' + (3 * cell + PAD) + 'px)';
-        for (const n of [exitFill, exitFrame]) {
-          n.style.width = w + 'px';
-          n.style.height = h + 'px';
-          n.style.transform = tf;
-        }
+        gapEl.style.width = w + 'px';
+        gapEl.style.height = wallH + 'px';
+        gapEl.style.transform = 'translate(' + (1 * cell + PAD) + 'px,' + (K.H * cell) + 'px)';
         const done = b.pieces[0].r === 3 && b.pieces[0].c === 1;
-        exitFill.classList.toggle('is-open', done);
-        exitFrame.classList.toggle('is-open', done);
+        gapEl.classList.toggle('is-open', done);
       }
       for (let i = 0; i < b.pieces.length; i++) {
         const p = b.pieces[i];
@@ -60,16 +60,16 @@
     function build(b) {
       clear(box);
       fit();
-      // 出口分两层画：
-      //   底层是"门洞"（光晕 + 文字），棋子压上去就看不见了，但空着时一眼能看到目标在哪；
-      //   顶层是金色虚线框，永远盖在最上面——不然曹操一旦挪过来，整个标记就被自己挡没了。
-      exitFill = el('div.k-exit', null, [
-        el('span.k-exit-arrow', { text: '▼' }),
-        el('span.k-exit-txt', { text: '出口' }),
+      // 底墙 + 墙上的缺口。缺口在棋盘**外面**，永远不会被棋子挡住。
+      wallEl = el('div.k-wall');
+      wallEl.style.height = wallH + 'px';
+      wallEl.style.transform = 'translate(0,' + (K.H * cell) + 'px)';
+      gapEl = el('div.k-gap', null, [
+        el('span.k-gap-arrow', { text: '▼' }),
+        el('span.k-gap-txt', { text: '出口' }),
       ]);
-      exitFrame = el('div.k-exit-frame');
-      box.appendChild(exitFill);
-      box.appendChild(exitFrame);
+      box.appendChild(wallEl);
+      box.appendChild(gapEl);
       els = [];
       for (let i = 0; i < b.pieces.length; i++) {
         const p = b.pieces[i];
