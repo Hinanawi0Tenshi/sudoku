@@ -101,8 +101,9 @@
         for (let k = 0; k < ch; k++) {
           const idx = k - (ch - list.length);
           const v = idx >= 0 ? list[idx] : null;
-          // 整行/整列是空的（线索为 [0]）就不显示数字——数织的惯例，写个"0"反而扎眼
-          const n = el('span.ng-clue', { text: (v === null || v === 0) ? '' : String(v) });
+          // 整行/整列是空的（线索为 [0]）也要把 0 显示出来。
+          // 早先按"数织惯例"留了空白，结果玩家看到一片空槽以为线索丢了——空白和"没渲染"没法区分。
+          const n = el('span.ng-clue' + (v === 0 ? '.is-zero' : ''), { text: v === null ? '' : String(v) });
           n.style.gridColumn = String(c + 1);
           n.style.gridRow = String(k + 1);
           if (v !== null) clueEls.cols[c].push({ node: n, k: k, value: v });
@@ -115,7 +116,7 @@
         for (let k = 0; k < cw; k++) {
           const idx = k - (cw - list.length);
           const v = idx >= 0 ? list[idx] : null;
-          const n = el('span.ng-clue', { text: (v === null || v === 0) ? '' : String(v) });
+          const n = el('span.ng-clue' + (v === 0 ? '.is-zero' : ''), { text: v === null ? '' : String(v) });
           n.style.gridColumn = String(k + 1);
           n.style.gridRow = String(r + 1);
           if (v !== null) clueEls.rows[r].push({ node: n, k: k, value: v });

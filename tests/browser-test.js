@@ -1699,8 +1699,8 @@ async function main() {
       const list = b.clues.cols[c];
       for (let k = 0; k < ch; k++) {
         const idx = k - (ch - list.length);
-        // 空行/空列的线索是 [0]，界面上不显示数字（数织惯例）
-        const want = (idx >= 0 && list[idx] !== 0) ? String(list[idx]) : '';
+        // 空行/空列的线索是 [0]，界面照常显示 0（留空会让人以为线索丢了）
+        const want = idx >= 0 ? String(list[idx]) : '';
         const node = kids[c * ch + k];
         if (!node) { bad++; continue; }
         if (node.textContent !== want) { bad++; if (!detail) detail = '列' + (c+1) + ' 第' + (k+1) + '格 期望"' + want + '" 实际"' + node.textContent + '"'; }

@@ -1986,6 +1986,8 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
 }
 /* 这一行/列的实心段已经和线索完全一致——灰掉，一眼看出哪几行做完了 */
 .ng-clue.is-done { color: var(--text-faint); opacity: .35; }
+/* 空行/空列的线索是 0。显示出来（而不是留空）——空白和"没渲染出来"没法区分。 */
+.ng-clue.is-zero { color: var(--text-faint); opacity: .55; font-weight: 500; }
 .ng-cell {
   appearance: none;
   border: 0;
