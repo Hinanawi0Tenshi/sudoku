@@ -1848,3 +1848,44 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .g-tip { margin: 10px 0 0; text-align: center; color: var(--text-faint); font-size: 12.5px; }
 .g-rank { margin-top: 8px; }
 [data-game="g2048"] .board-area { max-width: 560px; margin-inline: auto; }
+
+/* ---------------- 华容道 ----------------
+ * 木质配色，同样不跟主题走：这套颜色是它的辨识度所在。
+ * 曹操单独一色（红），大将一个色，卒最浅——一眼看出谁是主角。
+ */
+.k-wrap { display: flex; justify-content: center; padding: 6px 0; }
+.k-board {
+  position: relative;
+  margin: 0 auto;
+  background: #6b5642;
+  border-radius: var(--radius);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.k-piece {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  appearance: none;
+  border: 0;
+  padding: 0;
+  border-radius: 8px;
+  cursor: grab;
+  font-weight: 700;
+  transition: transform .12s ease, box-shadow .14s ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .32), 0 2px 6px rgba(0, 0, 0, .28);
+}
+.k-piece:active { cursor: grabbing; }
+.k-name { font-size: calc(var(--kcell, 80px) * 0.26); line-height: 1.1; }
+.k-piece[data-type="0"] { background: #b03a2e; color: #fff; }
+.k-piece[data-type="0"] .k-name { font-size: calc(var(--kcell, 80px) * 0.30); }
+.k-piece[data-type="1"], .k-piece[data-type="2"] { background: #c98b4b; color: #2b1d0e; }
+.k-piece[data-type="3"] { background: #e3d2ac; color: #4a3a22; }
+.k-piece.is-sel { box-shadow: 0 0 0 3px var(--accent), 0 2px 8px rgba(0, 0, 0, .32); }
+.k-piece.is-ref { box-shadow: 0 0 0 3px #f59e0b, 0 2px 8px rgba(0, 0, 0, .32); }
+.k-board.is-won .k-piece[data-type="0"] { background: #16a34a; }
+.k-tip { margin: 10px 0 0; text-align: center; color: var(--text-faint); font-size: 12.5px; }
+[data-game="klotski"] .board-area { max-width: 480px; margin-inline: auto; }

@@ -1494,7 +1494,9 @@ async function main() {
     b.score = 0; b.moves = 0; b.state = 'playing';
     G.app.render();
     const moved = G.app.move('left');
-    const merged = b.cells[0] === 4 && b.cells[1] === 0;
+    // 只看第一格是不是合并出来的 4。不能顺带断言第二格为空——
+    // 落新牌的位置是随机的，它完全可能正好落在第二格，那样断言就会偶发失败。
+    const merged = b.cells[0] === 4;
     const gained = b.score === 4;
 
     // 推不动时不该算步数
@@ -1545,6 +1547,83 @@ async function main() {
              info: guard + ' 步，状态 ' + b.state + '，得分 ' + b.score + '，最大牌 ' + G.maxTile(b) + '，弹窗「' + title + '」，记录 ' + rec };
   })()`, 200000);
 
+  /* ================= 华容道 ================= */
+
+  await step('标题页把华容道列为可进入', `(async function(){
+    document.getElementById('btn-home').click();
+    await new Promise(r => setTimeout(r, 200));
+    const card = Array.from(document.querySelectorAll('.game-card'))
+      .find((c) => c.querySelector('.gc-name').textContent === '华容道');
+    if (!card) return { ok: false, info: '没有卡片' };
+    const soon = card.classList.contains('is-soon');
+    card.click();
+    await new Promise(r => setTimeout(r, 200));
+    const title = document.querySelector('.home-title');
+    return { ok: !soon && !!title && title.textContent === '华容道',
+             info: '置灰=' + soon + '，首页标题=' + (title ? title.textContent : '无') };
+  })()`);
+
+  await step('华容道：开局十块，曹操是 2×2', `(async function(){
+    document.querySelector('.home-item[data-go=hard]').click();
+    // 第一次进要先把全状态表算出来，会弹遮罩并异步开局，这里等它落地
+    for (let i = 0; i < 80; i++) {
+      await new Promise(r => setTimeout(r, 100));
+      if (SD.Klotski.app.getBoard()) break;
+    }
+    await new Promise(r => setTimeout(r, 200));
+    const K = SD.Klotski;
+    const b = K.app.getBoard();
+    const pieces = document.querySelectorAll('.k-piece').length;
+    const cao = b.pieces[0];
+    const d = K.app.distance();
+    return { ok: !!b && pieces === 10 && cao.w === 2 && cao.h === 2 && d > 0 && b.moves === 0,
+             info: pieces + ' 块，曹操 ' + cao.w + '×' + cao.h + '，离出口 ' + d + ' 步' };
+  })()`, 120000);
+
+  await step('华容道：提示走完剩余距离正好减一', `(function(){
+    const K = SD.Klotski;
+    let bad = 0, checked = 0;
+    for (let i = 0; i < 6; i++) {
+      const b = K.app.getBoard();
+      const d = K.app.distance();
+      if (d <= 0) break;
+      const m = K.app.hint();
+      if (!m) { bad++; break; }
+      checked++;
+      K.app.shift(m.index, m.dr, m.dc);
+      if (K.app.distance() !== d - 1) bad++;
+    }
+    return { ok: checked > 0 && bad === 0, info: '验了 ' + checked + ' 次，剩余距离不对 ' + bad + ' 次' };
+  })()`);
+
+  await step('华容道：沿最优解走到底，步数等于标注的最少步数', `(async function(){
+    const K = SD.Klotski;
+    document.getElementById('btn-k-restart').click();
+    for (let i = 0; i < 60; i++) {
+      await new Promise(r => setTimeout(r, 100));
+      if (K.app.getBoard() && K.app.getBoard().moves === 0) break;
+    }
+    const target = K.app.getBoard().distance;
+    let guard = 0;
+    while (K.app.getBoard().state !== 'won' && guard++ < 300) {
+      const m = K.app.hint();
+      if (!m) break;
+      K.app.shift(m.index, m.dr, m.dc);
+    }
+    await new Promise(r => setTimeout(r, 400));
+    const b = K.app.getBoard();
+    // 弹窗各自独立（close 只移除自己那层），所以取**最后一个**——取第一个会拿到
+    // 上一条用例残留的那个，标题就对不上了
+    const all = document.querySelectorAll('#dialog-root .modal');
+    const box = all[all.length - 1];
+    const title = box ? box.querySelector('h2').textContent : '';
+    const count = all.length;
+    for (const m of all) { const x = m.querySelector('.modal-head .btn'); if (x) x.click(); }
+    const best = SD.Klotski.store.best(b.level);
+    return { ok: b.state === 'won' && b.moves === target && !!best && /曹操/.test(title),
+             info: '走了 ' + b.moves + ' 步（标注最少 ' + target + '），弹窗「' + title + '」（当时共 ' + count + ' 个），记录 ' + (best ? best.moves : '无') };
+  })()`, 120000);
+
   /* ================= 导航 ================= */
 
   await step('从对局页能一路退回标题页换游戏', `(async function(){
@@ -1560,16 +1639,16 @@ async function main() {
     const atTitle = document.documentElement.getAttribute('data-view');
     const cards = document.querySelectorAll('.game-card').length;
     const clickable = Array.from(document.querySelectorAll('.game-card')).filter((c) => !c.classList.contains('is-soon')).length;
-    return { ok: atHome === 'home' && atTitle === 'title' && cards === 5 && clickable === 5,
+    return { ok: atHome === 'home' && atTitle === 'title' && cards === 6 && clickable === 6,
              info: '对局页 → ' + atHome + ' → ' + atTitle + '，标题页 ' + cards + ' 张卡片（' + clickable + ' 张可进入）' };
   })()`);
 
   // 全程同步：enter() / leave() 本来就是同步改视图的，不需要等定时器。
   // 原先这里每款游戏都 await 两次 setTimeout，在无头浏览器里被节流拉到几十秒一次，
   // 五次就是几分钟——超时被中断，而打点显示其实早就走完了。
-  await step('五款游戏都能进能出', `(function(){
+  await step('六款游戏都能进能出', `(function(){
     const out = [];
-    for (const name of ['数独', '杀手数独', '扫雷', '数字华容道', '2048']) {
+    for (const name of ['数独', '杀手数独', '扫雷', '数字华容道', '2048', '华容道']) {
       const card = Array.from(document.querySelectorAll('.game-card'))
         .find((c) => c.querySelector('.gc-name').textContent === name);
       if (!card) { out.push(name + ':没有卡片'); continue; }
