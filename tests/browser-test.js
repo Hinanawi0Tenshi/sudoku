@@ -1813,6 +1813,69 @@ async function main() {
     return { ok: filled === b.w && left === 0, info: '划一次填了 ' + filled + '/' + b.w + ' 格，再划一次剩 ' + left + ' 格' };
   })()`);
 
+  // 回归：拖拽时黑块必须"跟手"。原先 view.touch() 读的是渲染时缓存的旧值，
+  // toggle 的是旧状态，黑块要等松手整块重画才出现——玩家看不到自己划到哪了。
+  await step('数织：拖拽时黑块立即出现（不等松手）', `(function(){
+    const N = SD.Nonogram;
+    N.app.startLevel('medium', 'follow-1');
+    const b = N.app.getBoard();
+    for (let i = 0; i < b.cells.length; i++) N.setCell(b, i, 0);
+    N.app.render();
+    const grid = document.querySelector('.ng-grid');
+    const r = grid.getBoundingClientRect();
+    const size = r.width / b.w;
+    const at = (c, row) => ({ x: r.left + (c + 0.5) * size, y: r.top + (row + 0.5) * size });
+    const cells = document.querySelectorAll('.ng-cell');
+    const p0 = at(0, 2);
+    cells[2 * b.w].dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: p0.x, clientY: p0.y, button: 0 }));
+    const afterDown = cells[2 * b.w].classList.contains('is-fill');
+    const p1 = at(1, 2);
+    document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: p1.x, clientY: p1.y }));
+    // 还没松手
+    const midFollow = cells[2 * b.w + 1].classList.contains('is-fill');
+    const midBoard = b.cells[2 * b.w + 1] === 1;
+    document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    return { ok: afterDown && midFollow && midBoard,
+             info: '按下后首格变黑=' + afterDown + '；划过第二格、**松手前**它已变黑=' + midFollow
+               + '（盘面值=' + b.cells[2 * b.w + 1] + '）' };
+  })()`);
+
+  await step('数织：撤回一次操作', `(function(){
+    const N = SD.Nonogram;
+    // 必须开新局：begin() 会清空撤回栈，否则上一条用例留下的记录会让"再撤一次"也生效
+    N.app.startLevel('medium', 'undo-1');
+    const b = N.app.getBoard();
+    for (let i = 0; i < b.cells.length; i++) N.setCell(b, i, 0);
+    N.app.render();
+    const grid = document.querySelector('.ng-grid');
+    const r = grid.getBoundingClientRect();
+    const size = r.width / b.w;
+    const at = (c, row) => ({ x: r.left + (c + 0.5) * size, y: r.top + (row + 0.5) * size });
+    const cells = document.querySelectorAll('.ng-cell');
+    const before = Array.from(b.cells).join(',');
+    // 划一整行
+    const p0 = at(0, 4);
+    cells[4 * b.w].dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: p0.x, clientY: p0.y, button: 0 }));
+    for (let c = 1; c < b.w; c++) {
+      const p = at(c, 4);
+      document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: p.x, clientY: p.y }));
+    }
+    document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    let painted = 0;
+    for (let c = 0; c < b.w; c++) if (b.cells[4 * b.w + c] === 1) painted++;
+    // 撤回：整行一次退回，不是一格格退
+    document.getElementById('btn-n-undo').click();
+    let left = 0;
+    for (let c = 0; c < b.w; c++) if (b.cells[4 * b.w + c] !== 0) left++;
+    const restored = Array.from(b.cells).join(',') === before;
+    // 再点一次：没有可撤的了，盘面不能变
+    document.getElementById('btn-n-undo').click();
+    const stillOk = Array.from(b.cells).join(',') === before;
+    return { ok: painted === b.w && left === 0 && restored && stillOk,
+             info: '划了 ' + painted + ' 格，撤回后剩 ' + left + ' 格，盘面复原=' + restored
+               + '，空栈再点不出错=' + stillOk };
+  })()`);
+
   await step('数织：提示的结论必须和真解一致', `(function(){
     const N = SD.Nonogram;
     let wrong = 0, steps = 0;

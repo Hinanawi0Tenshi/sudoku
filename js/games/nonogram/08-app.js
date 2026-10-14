@@ -155,6 +155,7 @@
       el('button.btn', { id: 'btn-n-hint', title: '提示 (H)' }, [el('span.tool-ico', { text: '💡' }), ' 提示']),
       el('button.btn', { id: 'btn-n-mode', title: '切换填色 / 标记 (F)' }, [el('span.tool-ico', { text: '✏️' }), ' 填色']),
       el('button.btn', { id: 'btn-n-check', title: '检查' }, [el('span.tool-ico', { text: '✓' }), ' 检查']),
+      el('button.btn', { id: 'btn-n-undo', title: '撤回一歩 (Ctrl+Z)' }, [el('span.tool-ico', { text: '↶' }), ' 撤回']),
       el('button.btn', { id: 'btn-n-restart2', title: '重开一局 (R)' }, [el('span.tool-ico', { text: '↻' }), ' 重开']),
       el('button.btn', { id: 'btn-n-learn', title: '怎么玩' }, [el('span.tool-ico', { text: '📖' }), ' 怎么玩']),
     ]);
@@ -222,8 +223,34 @@
     return UNKNOWN;
   }
 
+  /**
+   * 撤回栈。粒度是**一次操作**（一划、一点、一次"走这一步"），不是一格——
+   * 拖过一片之后按撤回，期望的是整片回来，不是一格格退。
+   * 快照就一份盘面数组（最多 400 字节），存 50 份也无所谓。
+   */
+  const undoStack = [];
+  const UNDO_MAX = 50;
+
+  function pushUndo() {
+    if (!board) return;
+    undoStack.push({ cells: Uint8Array.from(board.cells), moves: board.moves });
+    if (undoStack.length > UNDO_MAX) undoStack.shift();
+  }
+
+  function undo() {
+    if (!board) return;
+    const snap = undoStack.pop();
+    if (!snap) { toast('没有可撤回的了'); return; }
+    board.cells.set(snap.cells);
+    board.moves = snap.moves;
+    board.state = 'playing';       // 万一刚才那歩刚好收局，撤回之后要能接着玩
+    render();
+    scheduleSave();
+  }
+
   function paintStart(i, rightClick) {
     if (!board || board.state === 'won') return;
+    pushUndo();
     const cur = board.cells[i];
     const asMark = markMode !== !!rightClick;    // 标记模式下左键打叉；普通模式下右键打叉
     if (asMark) paintMode = cur === MARKED ? 'clear' : 'mark';
@@ -236,7 +263,7 @@
     const want = paintValue();
     if (board.cells[i] === want) return;
     N.setCell(board, i, want);
-    if (view) view.touch(i);
+    if (view) view.touch(i, want);
   }
 
   function paintEnd() {
@@ -303,6 +330,7 @@
 
   function applyStep(step) {
     if (!board) return;
+    pushUndo();
     for (const k of step.filled) {
       const i = N.hints.toBoard(board, step, k);
       if (board.cells[i] === UNKNOWN) N.setCell(board, i, FILLED);
@@ -369,6 +397,7 @@
     meta = m;
     elapsedMs = 0;
     session++;
+    undoStack.length = 0;       // 换了一局，旧的撤回记录没意义了
     if (view) view.render(board, {});
     renderStatus();
     startTimer();
@@ -423,6 +452,7 @@
   function onKeyDown(e) {
     if (SD.Shell.game() !== def || SD.Shell.viewName() !== 'game') return;
     if (document.querySelector('#dialog-root .modal')) return;
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); undo(); return; }
     if (e.key === 'f' || e.key === 'F') { e.preventDefault(); toggleMode(); }
     else if (e.key === 'h' || e.key === 'H') { e.preventDefault(); showHint(); }
     else if (e.key === 'r' || e.key === 'R') { e.preventDefault(); restart(); }
@@ -439,6 +469,7 @@
     bind('btn-n-hint', showHint);
     bind('btn-n-mode', toggleMode);
     bind('btn-n-check', check);
+    bind('btn-n-undo', undo);
     bind('btn-n-restart', restart);
     bind('btn-n-restart2', restart);
     bind('btn-n-learn', () => SD.Shell.openPage('数织 · 怎么玩', (r) => renderLearn(r)));

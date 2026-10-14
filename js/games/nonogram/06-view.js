@@ -187,11 +187,16 @@
       }
     }
 
-    /** 只刷新一格的外观——拖拽时逐格整块重画会卡 */
-    function touch(i) {
+    /**
+     * 只刷新一格的外观——拖拽时逐格整块重画会卡。
+     * 值必须由调用方传进来。早先读的是渲染时缓存的 c._v，
+     * 拖拽时缓存还是旧的，于是 toggle 的是旧状态——黑块要等松手整块重画才出现，
+     * 玩家看不到自己划到哪了。
+     */
+    function touch(i, v) {
       const c = cellEls[i];
       if (!c) return;
-      const v = c._v;
+      c._v = v;
       c.classList.toggle('is-fill', v === FILLED);
       c.classList.toggle('is-mark', v === MARKED);
     }
