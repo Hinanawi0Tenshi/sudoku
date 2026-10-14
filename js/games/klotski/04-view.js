@@ -70,6 +70,17 @@
       ]);
       box.appendChild(wallEl);
       box.appendChild(gapEl);
+      // 空格**必须先加**。它们和棋子是同层元素，DOM 里靠后的画在上面——
+      // 反过来加的话，20 个深色空格会把棋子整个盖住（踩过一次，整盘变黑只剩文字）。
+      for (let r = 0; r < K.H; r++) {
+        for (let c = 0; c < K.W; c++) {
+          const g = el('i.k-slot');
+          g.style.width = (cell - PAD * 2) + 'px';
+          g.style.height = (cell - PAD * 2) + 'px';
+          g.style.transform = 'translate(' + (c * cell + PAD) + 'px,' + (r * cell + PAD) + 'px)';
+          box.appendChild(g);
+        }
+      }
       els = [];
       for (let i = 0; i < b.pieces.length; i++) {
         const p = b.pieces[i];
@@ -80,16 +91,6 @@
         n.addEventListener('pointerdown', (e) => { if (onPick) onPick(i, e); });
         els.push(n);
         box.appendChild(n);
-      }
-      // 每格画一道浅线，空位才看得出是"格子"而不是背景
-      for (let r = 0; r < K.H; r++) {
-        for (let c = 0; c < K.W; c++) {
-          const g = el('i.k-slot');
-          g.style.width = (cell - PAD * 2) + 'px';
-          g.style.height = (cell - PAD * 2) + 'px';
-          g.style.transform = 'translate(' + (c * cell + PAD) + 'px,' + (r * cell + PAD) + 'px)';
-          box.appendChild(g);
-        }
       }
       place(b);
     }

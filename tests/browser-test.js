@@ -1585,6 +1585,27 @@ async function main() {
 
   // 出口 = 底墙上的缺口，开在**棋盘外面**，所以永远不会被棋子挡住。
   // （早先画成 2×2 的虚线框，压在棋子上既别扭，标的又是"曹操要占的位置"而不是出口。）
+  // 空格和棋子是同层元素，DOM 里靠后的画在上面。空格一旦加到棋子后面，
+  // 20 个深色空格会把棋子整个盖住——但点击照样能用（空格是 pointer-events:none），
+  // 所以光靠"能不能操作"发现不了，得直接盯 DOM 顺序。
+  await step('华容道：空格画在棋子下面，且和棋盘底色分得开', `(function(){
+    const board = document.querySelector('.k-board');
+    const kids = Array.from(board.children);
+    const slotIdx = kids.map((n, i) => (n.classList.contains('k-slot') ? i : -1)).filter((i) => i >= 0);
+    const pieceIdx = kids.map((n, i) => (n.classList.contains('k-piece') ? i : -1)).filter((i) => i >= 0);
+    const orderOk = slotIdx.length > 0 && pieceIdx.length > 0
+      && Math.max.apply(null, slotIdx) < Math.min.apply(null, pieceIdx);
+    // 空格底色必须和棋盘底色明显不同，否则分不出"这一格是空的"和"这只是两块之间的缝"
+    const slotBg = getComputedStyle(kids[slotIdx[0]]).backgroundColor;
+    const boardBg = getComputedStyle(board).backgroundColor;
+    const parse = (s) => (s.match(/\\d+/g) || [0, 0, 0]).slice(0, 3).map(Number);
+    const a = parse(slotBg), b = parse(boardBg);
+    const diff = Math.abs(a[0]-b[0]) + Math.abs(a[1]-b[1]) + Math.abs(a[2]-b[2]);
+    return { ok: orderOk && diff > 60,
+             info: '空格 ' + slotIdx.length + ' 个在棋子 ' + pieceIdx.length + ' 个之前=' + orderOk
+               + '，底色差 ' + diff + '（空格 ' + slotBg + ' / 棋盘 ' + boardBg + '）' };
+  })()`);
+
   await step('华容道：出口是底墙上的缺口，且在棋盘外面', `(function(){
     const K = SD.Klotski;
     const b = K.app.getBoard();
