@@ -163,6 +163,8 @@
     let idx = -1;
     for (let i = 0; i < board.cells.length; i++) if (board.cells[i] === value) { idx = i; break; }
     if (idx < 0 || !S.canMove(board, idx)) return;
+    // 玩家自己动手了，提示的"上一歩"上下文就作废了——不清的话防回退会误判
+    S.hints.reset();
     S.move(board, idx);
     render();
     scheduleSave();
@@ -242,6 +244,8 @@
     if (!board || board.state === 'won') { toast('这局已经结束了'); return; }
     const h = S.hints.best(board);
     if (!h) { toast('现在没有能走的格子'); return; }
+    // 提示算出来的这一步也算"玩家即将走的一步"，清掉上下文避免连点两次互相打架
+    const keep = h.cells[0];
     if (view) view.render(board, { hint: h });
     const e = h.explain;
     modal({
@@ -254,8 +258,8 @@
         el('p', { text: e.principle }),
       ],
       footer: [
-        { label: '只看看', onClick: () => { if (view) view.render(board, {}); } },
-        { label: '走这一步', primary: true, onClick: () => { tap(h.tile); } },
+        { label: '只看看', onClick: () => { S.hints.reset(); if (view) view.render(board, {}); } },
+        { label: '走这一步', primary: true, onClick: () => { S.move(board, keep); afterMove(); } },
       ],
     });
   }

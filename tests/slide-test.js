@@ -190,6 +190,65 @@ section('5. 提示');
   ok('终局不给提示', S.hints.best(S.create(3)) === null);
 }
 
+/* ---------------- 6. 提示质量 ---------------- */
+
+section('6. 提示质量');
+
+{
+  // 核心回归：**提示不能来回打转**。
+  // 用户报过这个：提示先说「把 10 往上滑」，照做之后立刻改口「把 10 往下滑」——
+  // 两个方向互相抵消，实测能无限循环下去。
+  let backForth = 0, solved = 0, boards = 0, hintMs = 0, hints = 0;
+  for (const [lv, cnt, limit] of [['n3', 10, 600], ['n4', 5, 1500]]) {
+    for (let s = 0; s < cnt; s++) {
+      const b = S.start(lv, 'hq-' + lv + '-' + s);
+      S.hints.reset();
+      const hist = [];
+      let guard = 0;
+      while (!S.solved(b) && guard++ < limit) {
+        const t0 = Date.now();
+        const h = S.hints.best(b);
+        hintMs += Date.now() - t0;
+        hints++;
+        if (!h) break;
+        hist.push(h.cells[0]);
+        S.move(b, h.cells[0]);
+      }
+      if (S.solved(b)) solved++;
+      boards++;
+      // 周期 2 的往复 = 用户报的那个症状
+      for (let i = 2; i < hist.length; i++) {
+        if (hist[i] === hist[i - 2] && hist[i] !== hist[i - 1]) { backForth++; break; }
+      }
+    }
+  }
+  ok('提示不会来回往复（周期 2）', backForth === 0, backForth + '/' + boards + ' 局出现');
+  ok('3×3 与 4×4 沿提示都能解出', solved === boards, solved + '/' + boards);
+  ok('单次提示在 100ms 以内', hintMs / Math.max(1, hints) < 100, (hintMs / Math.max(1, hints)).toFixed(0) + 'ms');
+  console.log('  ' + boards + ' 局全部沿提示走到底，平均每次提示 ' + (hintMs / Math.max(1, hints)).toFixed(0) + 'ms');
+}
+
+{
+  // 5×5：不保证解出，但必须持续往前推进、且不打转
+  const b = S.start('n5', 'hq-n5-0');
+  S.hints.reset();
+  const d0 = S.solver.totalDistance(b.cells, 5);
+  const hist = [];
+  let guard = 0;
+  while (!S.solved(b) && guard++ < 600) {
+    const h = S.hints.best(b);
+    if (!h) break;
+    hist.push(h.cells[0]);
+    S.move(b, h.cells[0]);
+  }
+  const d1 = S.solver.totalDistance(b.cells, 5);
+  let backForth = 0;
+  for (let i = 2; i < hist.length; i++) if (hist[i] === hist[i - 2] && hist[i] !== hist[i - 1]) { backForth++; break; }
+  ok('5×5 不打转', backForth === 0);
+  ok('5×5 确实在往前推进', S.solved(b) || d1 < d0 * 0.8, '总距离 ' + d0 + ' → ' + d1);
+  console.log('  5×5：总距离 ' + d0 + ' → ' + d1 + '，解出=' + S.solved(b));
+}
+
 /* ---------------- 汇总 ---------------- */
 
 console.log('\n================================');
