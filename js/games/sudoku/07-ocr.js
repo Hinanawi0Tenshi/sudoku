@@ -160,30 +160,31 @@
 
   function startDrag(ev, key, scale) {
     ev.preventDefault();
+    // 基准矩形必须在**按下这一刻**量好。
+    // ev.currentTarget 只在事件派发期间有效，等 pointermove 异步触发时它已经是 null，
+    // 在那里调 getBoundingClientRect() 直接抛异常——表现就是四个角拖不动。
+    const stage = ev.currentTarget.parentElement;
+    if (!stage) return;
+    const rect = stage.getBoundingClientRect();
+
     const move = (e) => {
-      const rect = ev.currentTarget.getBoundingClientRect();
       const x = (e.clientX - rect.left) / scale;
       const y = (e.clientY - rect.top) / scale;
       state.quad[key] = {
         x: Math.max(0, Math.min(state.image.width, x)),
         y: Math.max(0, Math.min(state.image.height, y)),
       };
-      const h = document.querySelector('.ocr-handle[data-label="' + labelOf(key) + '"]');
-      if (h) {
-        h.style.left = state.quad[key].x * scale + 'px';
-        h.style.top = state.quad[key].y * scale + 'px';
-      }
-      drawStage();
+      drawStage();   // 重画会重建四个角，位置跟着 state.quad 走
     };
     const up = () => {
       document.removeEventListener('pointermove', move);
       document.removeEventListener('pointerup', up);
+      document.removeEventListener('pointercancel', up);
     };
     document.addEventListener('pointermove', move);
     document.addEventListener('pointerup', up);
+    document.addEventListener('pointercancel', up);
   }
-
-  const labelOf = (k) => ({ tl: '左上', tr: '右上', br: '右下', bl: '左下' })[k];
 
   SD.Sudoku.ocr = { state: state, loadSource: loadSource, autoDetect: autoDetect, drawStage: drawStage, LOW_CONF: LOW_CONF, log: log, setStatus: setStatus };
 

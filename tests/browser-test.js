@@ -1241,6 +1241,32 @@ await step('图片识别：修正弹窗显示整盘结果，且点格子会重�
              + '有操作说明=' + !!hint + '，点空格后 "' + before + '" → "' + after + '"' };
 })()`, 60000);
 
+// 回归：四个角拖不动。startDrag 里把 ev.currentTarget.getBoundingClientRect()
+// 放进了 pointermove 回调——currentTarget 只在事件派发那一刻有效，异步触发时是 null，
+// 直接抛异常，拖拽整个失效。
+await step('图片识别：四个角能拖动', `(async function(){
+  const cv = document.createElement('canvas');
+  cv.width = 240; cv.height = 240;
+  const c2 = cv.getContext('2d');
+  c2.fillStyle = '#fff'; c2.fillRect(0, 0, 240, 240);
+  c2.fillStyle = '#222'; c2.fillRect(24, 24, 192, 192);
+  await SD.Sudoku.ocr.loadSource(cv.toDataURL(), '测试图');
+  await new Promise(r => setTimeout(r, 400));
+  const handle = document.querySelector('.ocr-handle');
+  if (!handle) return { ok: false, info: '没有角标（图片没载入？）' };
+  const before = Object.assign({}, SD.Sudoku.ocr.state.quad.tl);
+  const hr = handle.getBoundingClientRect();
+  const sx = hr.left + hr.width / 2, sy = hr.top + hr.height / 2;
+  handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: sx, clientY: sy, button: 0 }));
+  document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: sx + 40, clientY: sy + 30 }));
+  document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+  const after = SD.Sudoku.ocr.state.quad.tl;
+  const moved = Math.abs(after.x - before.x) > 5 && Math.abs(after.y - before.y) > 5;
+  return { ok: moved,
+           info: '左上角 (' + Math.round(before.x) + ',' + Math.round(before.y) + ') → ('
+             + Math.round(after.x) + ',' + Math.round(after.y) + ')' };
+})()`, 60000);
+
 /* ================= 杀手数独 ================= */
 
   await evaluate('(function () { for (let i = 0; i < 20; i++) {'
