@@ -131,6 +131,7 @@ const SCORE = `(async function () {
   }
   return { total: f.givens.filter(Boolean).length, right, wrong, missing, extra, low, extraInfo,
     givenRatio: s.givenRatio, givenInk: s.givenInk,
+
     log: (document.querySelector('.ocr-log')||{}).textContent || '',
     status: (document.querySelector('.ocr-status')||{}).textContent || '' };
 })()`;
@@ -192,7 +193,8 @@ const SCORE = `(async function () {
     console.log('  ' + (mode === 'clean' ? '[干净图]' : mode === 'notes' ? '[笔记  ]' : '[照片  ]') + ' 题面 ' + r.total + ' 个数字 → 正确 ' + r.right + '（' + pct + '%）、误识 ' + r.wrong + '、漏识 ' + r.missing + '、多出 ' + r.extra + '，待人工确认 ' + r.low + ' 格');
     console.log('           ' + String(r.log).trim().split('\n').filter(Boolean).join(' / '));
     console.log('           尺寸分界 givenRatio=' + (r.givenRatio != null ? Number(r.givenRatio).toFixed(3) : '未设置')
-      + '，墨色分界 givenInk=' + (r.givenInk != null ? Number(r.givenInk).toFixed(0) : '未启用'));
+      + '，墨色分界 givenInk=' + (r.givenInk != null ? Number(r.givenInk).toFixed(0) : '未启用')
+);
     results[mode] = r;
   }
   // 干净合成图是识别准确率的红线：透视校正、切格、二值化、逐格 OCR 全在里面。
