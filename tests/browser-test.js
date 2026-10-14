@@ -1258,6 +1258,38 @@ async function main() {
              info: cells.length + ' 格，笼和标签 ' + sums + ' 个（应 ' + puz.list.length + '），带笼边的格子 ' + edges + ' 个' };
   })()`);
 
+  // 回归：笼和和候选数都在格子左上角。不让位的话笼和"11"会叠上候选"1"，
+  // 看起来就是"111"——玩家分不出哪个是笼和。
+  // 踩过一次：.cell.is-cage 这个类压根没被加上，CSS 写了也不生效（连背景色那条都是死代码）。
+  await step('杀手数独：笼和与候选数不重叠', `(async function(){
+    const btn = document.getElementById('btn-k-auto-notes');
+    if (!btn) return { ok: false, info: '没有一键笔记按钮' };
+    btn.click();
+    await new Promise(r => setTimeout(r, 500));
+    const cells = document.querySelectorAll('#board .cell');
+    let bad = 0, withSum = 0, ex = '';
+    for (const c of cells) {
+      const sum = c.querySelector('.cell-cage');
+      const notes = c.querySelector('.cell-notes');
+      if (!sum.textContent || !notes.children.length) continue;
+      withSum++;
+      const sr = sum.getBoundingClientRect();
+      for (const n of notes.children) {
+        const nr = n.getBoundingClientRect();
+        if (!(nr.right < sr.left || nr.left > sr.right || nr.bottom < sr.top || nr.top > sr.bottom)) {
+          bad++;
+          if (!ex) ex = '笼和"' + sum.textContent + '" 压住候选"' + n.textContent + '"';
+          break;
+        }
+      }
+    }
+    // 顺带验 is-cage 真的加上了——没这个类，让位那条 CSS 全是空谈
+    const cageClsOk = Array.from(cells).filter((c) => c.querySelector('.cell-cage').textContent)
+      .every((c) => c.classList.contains('is-cage'));
+    return { ok: bad === 0 && withSum > 0 && cageClsOk,
+             info: withSum + ' 格有笼和，重叠 ' + bad + ' 处，is-cage 齐全=' + cageClsOk + (ex ? '（' + ex + '）' : '') };
+  })()`, 60000);
+
   await step('提示面板：每一条结论都与真解一致', `(async function(){
     document.getElementById('btn-k-hint').click();
     await new Promise(r => setTimeout(r, 500));

@@ -714,6 +714,10 @@ button.brand:hover { opacity: .72; }
   grid-template: repeat(3, 1fr) / repeat(3, 1fr);
   pointer-events: none;
 }
+/* 有笼和的格子，候选数整体下移让位。
+   不让的话笼和和候选"1"画在同一处——笼和"11"叠上候选"1"就是"111"，
+   玩家根本分不出哪个是笼和。 */
+.cell.is-cage .cell-notes { top: 14px; }
 .cell-notes span {
   display: grid; place-items: center;
   font-size: clamp(8px, 1.72vw, 11.5px);
@@ -1219,6 +1223,7 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
   .board-flags { gap: 14px; }
   .cell-value { font-size: 24px; }
   .cell-notes span { font-size: 10.5px; }
+  .cell.is-cage .cell-notes { top: 12px; }
   .tab-body { padding: 13px; }
   .theme-grid { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); }
 }
@@ -1701,22 +1706,24 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .cell-cage {
   position: absolute;
   /* 笼子虚线内缩了 2px（占 2~4px），数字得让开它，否则会被虚线划过去 */
-  top: 4px;
-  left: 5px;
-  font-size: clamp(9px, 1.7vw, 12px);
+  top: 2px;
+  left: 4px;
+  /* 笼和必须够小：它占掉的高度直接是从候选数那里抢的 */
+  font-size: clamp(7.5px, 1.35vw, 9.5px);
   font-weight: 650;
   line-height: 1;
   color: var(--text-dim);
   pointer-events: none;
 }
-.cell.is-cage { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+/* 注意：这里刻意不给 is-cage 加底色。杀手盘面不用交替淡底（会和笼子边框抢注意力），
+   这个类只用来标记"左上角有笼和"，供候选数让位。 */
 .killer-logo { background: linear-gradient(135deg, #a855f7, #6d28d9); }
 .killer-demo { margin: 8px 0; max-width: 340px; }
 .killer-demo .board { box-shadow: none; }
 
 /* 教程演示盘面比主棋盘小得多，字号必须跟着缩——否则 33px 的数字塞进 38px 的格子里会叠字 */
 .killer-demo .cell-value { font-size: clamp(12px, 2.1vw, 19px); }
-.killer-demo .cell-cage { font-size: 8.5px; top: 4px; left: 4px; }
+.killer-demo .cell-cage { font-size: 8px; top: 2px; left: 3px; }
 .killer-demo .board { border-width: 1px; }
 
 /* 游戏首页的返回键。放在左上角、做成胶囊按钮：它是对局页退回来之后唯一的出路，

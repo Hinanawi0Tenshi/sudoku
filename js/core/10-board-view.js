@@ -74,6 +74,9 @@
               (B.ROW_OF[x] === B.ROW_OF[anchor] && B.COL_OF[x] < B.COL_OF[anchor])) anchor = x;
         }
         cageSum[anchor] = String(cg.sum);
+        // 标记"这格左上角有笼和"：候选数得整体下移给它让位，
+        // 不然笼和会和候选"1"叠在同一处（"11"+"1" 看着就是"111"）。
+        cageCls[anchor] += ' is-cage';
       }
     }
 
