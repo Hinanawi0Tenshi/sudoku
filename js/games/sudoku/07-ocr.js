@@ -548,23 +548,38 @@
     box.appendChild(grid);
   }
 
+  /**
+   * 人工修正。
+   *
+   * 弹窗里放的是**整盘识别结果**，不是空白盘——玩家点某一格，往往是因为看到它红了，
+   * 但改的时候还得参照旁边那些格子。早先这里从全 0 起步、只填被点的那一格，
+   * 看着就像"识别结果全丢了"；而且点格子只改数组不重绘（_refresh 定义了从没调用），
+   * 点了没任何反应。
+   */
   function editCell(i) {
-    const wrap = el('div.ocr-preview');
-    const grid = new Array(81).fill(0);
-    grid[i] = state.digits[i];
+    const grid = Array.from(state.digits);
+    const cells = [];
+    const paint = (k) => {
+      const c = cells[k];
+      c.textContent = grid[k] ? String(grid[k]) : '';
+      c.className = 'ocr-cell' + (grid[k] ? ' has' : '') + (k === i ? ' is-sel' : '');
+    };
     for (let k = 0; k < 81; k++) {
-      const cell = el('div.ocr-cell' + (grid[k] ? '.has' : ''), {
-        text: grid[k] ? String(grid[k]) : '',
-        onclick: () => (grid[k] = (grid[k] + 1) % 10),
+      const cell = el('div.ocr-cell', {
+        onclick: () => { grid[k] = (grid[k] + 1) % 10; paint(k); },
       });
-      cell._refresh = () => {
-        cell.textContent = grid[k] ? String(grid[k]) : '';
-        cell.className = 'ocr-cell' + (grid[k] ? ' has' : '');
-      };
-      wrap.appendChild(cell);
+      cells.push(cell);
     }
+    for (let k = 0; k < 81; k++) paint(k);
+    const wrap = el('div', null, [
+      el('p.ocr-hint', {
+        text: '点格子循环 0→1→…→9（0 表示空格）。整盘都能改，改完点确定。'
+          + '蓝框是刚点的 R' + (Math.floor(i / 9) + 1) + 'C' + ((i % 9) + 1) + '。',
+      }),
+      el('div.ocr-preview', null, cells),
+    ]);
     modal({
-      title: 'R' + (Math.floor(i / 9) + 1) + 'C' + ((i % 9) + 1) + ' — 点格子循环 0→1→…→9',
+      title: '修正识别结果',
       body: wrap,
       footer: [
         { label: '取消' },
@@ -572,9 +587,11 @@
           label: '确定',
           primary: true,
           onClick: () => {
-            state.digits[i] = grid[i];
-            state.confidences[i] = 100; // 人工确认过的直接标为可信
-            // 改完重算冲突：原先红着的格子可能因为这一改而不成立了
+            // 整盘一次性写回：改动的格标成"人工确认"，没动的保持原置信度
+            for (let k = 0; k < 81; k++) {
+              if (grid[k] !== state.digits[k]) state.confidences[k] = 100;
+              state.digits[k] = grid[k];
+            }
             checkConflicts();
             renderResult();
           },

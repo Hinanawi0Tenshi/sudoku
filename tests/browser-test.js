@@ -1191,7 +1191,57 @@ async function main() {
              info: '扫雷键有 stats 没有 userBank；数独键两者都有——两份数据互不干扰' };
   })()`);
 
-  /* ================= 杀手数独 ================= */
+  /* ================= 数独 · 图片识别 ================= */
+
+// 回归：修正弹窗原先从全 0 起步、只填被点的那一格，看着像"识别结果全丢了"；
+// 而且点格子只改数组不重绘（_refresh 定义了从没调用），点了没反应。
+await step('图片识别：修正弹窗显示整盘结果，且点格子会重绘', `(async function(){
+  document.getElementById('btn-home').click();
+  await new Promise(r => setTimeout(r, 250));
+  Array.from(document.querySelectorAll('.game-card'))
+    .find((c) => c.querySelector('.gc-name').textContent === '数独').click();
+  await new Promise(r => setTimeout(r, 300));
+  // 图片识别挂在「题库」页里
+  const bank = document.querySelector('.home-item[data-go=bank]');
+  if (!bank) return { ok: false, info: '找不到「题库」入口' };
+  bank.click();
+  await new Promise(r => setTimeout(r, 400));
+
+  const ocr = SD.Sudoku.ocr;
+  if (!ocr || !ocr.state) return { ok: false, info: 'ocr.state 没暴露' };
+  // 造一份"识别结果"：几个格子有数字，其余为空
+  ocr.state.digits.fill(0);
+  const seeded = [0, 1, 4, 9, 40, 80];
+  seeded.forEach((i, k) => { ocr.state.digits[i] = (k % 9) + 1; });
+  ocr.renderResult();
+  await new Promise(r => setTimeout(r, 200));
+
+  const preview = document.querySelector('.ocr-preview');
+  if (!preview) return { ok: false, info: '结果区没有渲染' };
+  // 点第 5 格（有数字的那个），打开修正弹窗
+  preview.children[4].click();
+  await new Promise(r => setTimeout(r, 300));
+  const modals = document.querySelectorAll('#dialog-root .modal');
+  const box = modals[modals.length - 1];
+  if (!box) return { ok: false, info: '弹窗没打开' };
+  const cells = box.querySelectorAll('.ocr-cell');
+  let shown = 0;
+  for (const c of cells) if (c.textContent) shown++;
+  const hint = box.querySelector('.ocr-hint');
+  // 点弹窗里一个空格，看它有没有立刻重绘
+  const empty = Array.from(cells).find((c) => !c.textContent);
+  const before = empty ? empty.textContent : '';
+  if (empty) empty.click();
+  const after = empty ? empty.textContent : '';
+  // 收尾：关掉弹窗
+  const closeBtn = box.querySelector('.modal-head .btn');
+  if (closeBtn) closeBtn.click();
+  return { ok: cells.length === 81 && shown >= seeded.length && !!hint && !!after && after !== before,
+           info: '弹窗里 ' + cells.length + ' 格、显示了 ' + shown + ' 个数字（注入 ' + seeded.length + ' 个），'
+             + '有操作说明=' + !!hint + '，点空格后 "' + before + '" → "' + after + '"' };
+})()`, 60000);
+
+/* ================= 杀手数独 ================= */
 
   await evaluate('(function () { for (let i = 0; i < 20; i++) {'
     + ' const b = document.querySelector("#dialog-root .modal-head .btn"); if (!b) break; b.click(); }'

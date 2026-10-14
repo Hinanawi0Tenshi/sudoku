@@ -1108,6 +1108,8 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
 }
 .ocr-cell.low.clash { background: color-mix(in srgb, var(--danger) 28%, transparent); }
 .ocr-cell:hover { border-color: var(--accent); }
+/* 修正弹窗顶部的操作说明。这个弹窗第一次见的人完全猜不到"点格子会循环数字" */
+.ocr-hint { margin: 0 0 12px; font-size: 12.5px; line-height: 1.6; color: var(--text-dim); }
 .ocr-status { font-size: 12.5px; color: var(--text-dim); margin-top: 8px; }
 .ocr-log { font-family: var(--mono); font-size: 11.5px; color: var(--text-faint); max-height: 110px; overflow: auto; margin-top: 8px; }
 
