@@ -131,8 +131,11 @@
     // 改成实心头 + 粗杆 + 一个明显的齿才过验。
     key:   ['..####....', '.######...', '########..', '########..', '.######...', '..####....',
             '...###....', '...###....', '...#####..', '...###....'],
-    mug:   ['..........', '########..', '########.#', '#......#.#', '#......#.#', '#......#.#',
-            '#......#.#', '#......#..', '########..', '.######...'],
+    // 把手必须和杯身连上，且不能太细。原来画成"杯身 | 空一列 | 把手"，
+    // 中间那列整列是空的——裁图裁不掉内部空列，线索里就留下一个 0；
+    // 改成细把手之后又变成多解（把手的位置摆法不唯一）。现在这个粗方把手两种毛病都没有。
+    mug:   ['..........', '########..', '#......#..', '#......###', '#......#.#', '#......#.#',
+            '#......###', '########..', '.######...', '..........'],
   };
 
   const SMALL = {
@@ -145,9 +148,35 @@
 
   /* ---------------- 组装图库 ---------------- */
 
+  /**
+   * 裁到图形的外接矩形。
+   *
+   * 不裁的话，图形四周会留出整行整列的空格——那些行列的线索是 0，盘面上冒出一堆 0，
+   * 玩家看着就像"这里怎么没线索"。数织的图本来就该紧贴取景框，留白是取景没取好。
+   * 实测 41 张里有 23 张是这样。
+   */
+  function crop(rows) {
+    let top = -1, bottom = -1, left = Infinity, right = -1;
+    for (let r = 0; r < rows.length; r++) {
+      const line = rows[r];
+      for (let c = 0; c < line.length; c++) {
+        if (line[c] !== '#') continue;
+        if (top < 0) top = r;
+        bottom = r;
+        if (c < left) left = c;
+        if (c > right) right = c;
+      }
+    }
+    if (top < 0) return rows;               // 整张全空，原样返回（不该发生）
+    const out = [];
+    for (let r = top; r <= bottom; r++) out.push(rows[r].slice(left, right + 1));
+    return out;
+  }
+
   const list = [];
   function add(id, name, rows, tag) {
-    list.push({ id: id, name: name, w: rows[0].length, h: rows.length, rows: rows, tag: tag || '' });
+    const tight = crop(rows);
+    list.push({ id: id, name: name, w: tight[0].length, h: tight.length, rows: tight, tag: tag || '' });
   }
 
   // 5×5 入门

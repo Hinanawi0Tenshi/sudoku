@@ -28,24 +28,25 @@
     // （实测 10×10 最多 5 轮、20×20 也就 6 轮，用它分档会出现空档）。
     let star;
     if (!line) star = 5;                        // 必须靠假设才推得出来
-    else if (pic.w <= 5) star = 1;
-    else if (pic.w <= 10) star = 2;
-    else if (pic.w <= 15) star = 3;
+    else if (Math.max(pic.w, pic.h) <= 5) star = 1;
+    else if (Math.max(pic.w, pic.h) <= 10) star = 2;
+    else if (Math.max(pic.w, pic.h) <= 15) star = 3;
     else star = 4;
+    // 裁过之后长宽不再相等，取大的那边当"尺寸"——难度看的是盘面多大
     const r = {
-      id: pic.id, name: pic.name, size: pic.w, line: line,
-      rounds: pr.steps, unknown: pr.unknown || 0, unique: uniq === 1, star: star,
+      id: pic.id, name: pic.name, size: Math.max(pic.w, pic.h), w: pic.w, h: pic.h,
+      line: line, rounds: pr.steps, unknown: pr.unknown || 0, unique: uniq === 1, star: star,
     };
     rated.set(pic.id, r);
     return r;
   }
 
   const LEVELS = [
-    { id: 'easy',   name: '入门', desc: '5×5，一眼能看出画的什么', want: (r) => r.size <= 5,                 points: 6 },
-    { id: 'medium', name: '简单', desc: '10×10，纯推理',          want: (r) => r.size === 10 && r.line,     points: 18 },
-    { id: 'hard',   name: '中等', desc: '15×15',                 want: (r) => r.size === 15 && r.line,     points: 35 },
-    { id: 'expert', name: '困难', desc: '20×20，耐心活',          want: (r) => r.size >= 20 && r.line,      points: 60 },
-    { id: 'master', name: '大师', desc: '光靠行列推不完，得假设',  want: (r) => !r.line,                     points: 100 },
+    { id: 'easy',   name: '入门', desc: '小图，一眼看出画的什么', want: (r) => r.size <= 6,               points: 6 },
+    { id: 'medium', name: '简单', desc: '十格上下，纯推理',       want: (r) => r.size > 6 && r.size <= 10 && r.line,  points: 18 },
+    { id: 'hard',   name: '中等', desc: '十五格上下',             want: (r) => r.size > 10 && r.size <= 15 && r.line, points: 35 },
+    { id: 'expert', name: '困难', desc: '二十格上下，耐心活',      want: (r) => r.size > 15 && r.line,     points: 60 },
+    { id: 'master', name: '大师', desc: '光靠行列推不完，得假设',  want: (r) => !r.line,                   points: 100 },
   ];
   const byId = (id) => LEVELS.find((l) => l.id === id) || null;
 

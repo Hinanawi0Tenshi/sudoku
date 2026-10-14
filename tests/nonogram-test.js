@@ -124,10 +124,13 @@ section('4. 图库');
 
 {
   ok('图库有 41 张', N.pictures.length === 41, N.pictures.length + ' 张');
-  ok('每张图都有名字和尺寸', N.pictures.every((p) => p.name && p.w === p.h && p.rows.length === p.h));
-  ok('尺寸只有 5/10/15/20 四种',
-    N.pictures.every((p) => [5, 10, 15, 20].indexOf(p.w) >= 0),
-    Array.from(new Set(N.pictures.map((p) => p.w))).join(','));
+  // 裁到外接矩形之后不再是正方形——这是有意的，不是缺陷
+  ok('每张图都有名字、尺寸和行数对得上',
+    N.pictures.every((p) => p.name && p.w > 0 && p.h > 0 && p.rows.length === p.h
+      && p.rows.every((r) => r.length === p.w)));
+  ok('尺寸都在 5~20 之间',
+    N.pictures.every((p) => p.w >= 3 && p.w <= 20 && p.h >= 3 && p.h <= 20),
+    Array.from(new Set(N.pictures.map((p) => Math.max(p.w, p.h)))).sort((a, b) => a - b).join(','));
 
   // 每张图都要"有内容"：不能全空、也不能全满
   let degenerate = 0;
@@ -139,27 +142,52 @@ section('4. 图库');
   }
   ok('没有全空或全满的退化图', degenerate === 0, degenerate + ' 张');
 
+  // 图形必须紧贴取景框——空行空列的线索是 0，盘面上冒出一堆 0 玩家会以为线索丢了。
+  // 实测没裁之前 41 张里有 23 张是这样。
+  {
+    let zero = 0, names = [];
+    for (const p of N.pictures) {
+      const b = N.create(p);
+      const hit = b.clues.rows.some((c) => c.length === 1 && c[0] === 0)
+        || b.clues.cols.some((c) => c.length === 1 && c[0] === 0);
+      if (hit) { zero++; if (names.length < 3) names.push(p.name); }
+    }
+    ok('没有一张图带 0 线索（图形都紧贴取景框）', zero === 0, zero + ' 张：' + names.join('、'));
+
+    // 外接矩形必须正好是图片尺寸——四边都不该留空
+    let loose = 0;
+    for (const p of N.pictures) {
+      const b = N.create(p);
+      const firstRow = b.clues.rows[0][0], lastRow = b.clues.rows[b.h - 1][0];
+      const firstCol = b.clues.cols[0][0], lastCol = b.clues.cols[b.w - 1][0];
+      if (firstRow === 0 || lastRow === 0 || firstCol === 0 || lastCol === 0) loose++;
+    }
+    ok('四边都没有整行整列留白', loose === 0, loose + ' 张留白');
+  }
+
   // 公式图形：抽查几个已知形状的特征
   const heart = N.picById('heart10');
-  const hs = N.parseRows(heart.rows, 10, 10);
-  ok('爱心顶部中间是凹的（心形特征）', !hs[1 * 10 + 4] && !hs[1 * 10 + 5], '第 2 行中间应为空');
+  const hs = N.parseRows(heart.rows, heart.w, heart.h);
+  ok('爱心顶部中间是凹的（心形特征）', !hs[1 * heart.w + 4] && !hs[1 * heart.w + 5], '第 2 行中间应为空');
   ok('爱心底部收窄', (() => {
-    const cnt = (r) => { let n = 0; for (let c = 0; c < 10; c++) if (hs[r * 10 + c]) n++; return n; };
+    const cnt = (r) => { let n = 0; for (let c = 0; c < heart.w; c++) if (hs[r * heart.w + c]) n++; return n; };
     return cnt(2) > cnt(6) && cnt(6) > cnt(8);
-  })());
+  })(), heart.w + '×' + heart.h);
 
   const tri = N.picById('triangle10');
-  const ts = N.parseRows(tri.rows, 10, 10);
+  const ts = N.parseRows(tri.rows, tri.w, tri.h);
   ok('三角上尖下宽', (() => {
-    const cnt = (r) => { let n = 0; for (let c = 0; c < 10; c++) if (ts[r * 10 + c]) n++; return n; };
-    return cnt(0) < cnt(4) && cnt(4) < cnt(9);
-  })());
+    const cnt = (r) => { let n = 0; for (let c = 0; c < tri.w; c++) if (ts[r * tri.w + c]) n++; return n; };
+    const mid = Math.floor(tri.h / 2);
+    return cnt(0) < cnt(mid) && cnt(mid) < cnt(tri.h - 1);
+  })(), tri.w + '×' + tri.h);
 
   const cross = N.picById('cross10');
-  const cs = N.parseRows(cross.rows, 10, 10);
-  ok('十字横竖都有（第 5 行全实、第 5 列全实）', (() => {
-    for (let c = 0; c < 10; c++) if (!cs[4 * 10 + c]) return false;
-    for (let r = 0; r < 10; r++) if (!cs[r * 10 + 4]) return false;
+  const cs = N.parseRows(cross.rows, cross.w, cross.h);
+  ok('十字横竖都有（中间行全实、中间列全实）', (() => {
+    const mr = Math.floor(cross.h / 2), mc = Math.floor(cross.w / 2);
+    for (let c = 0; c < cross.w; c++) if (!cs[mr * cross.w + c]) return false;
+    for (let r = 0; r < cross.h; r++) if (!cs[r * cross.w + mc]) return false;
     return true;
   })());
 }
