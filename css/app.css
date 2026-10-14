@@ -1889,3 +1889,82 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .k-board.is-won .k-piece[data-type="0"] { background: #16a34a; }
 .k-tip { margin: 10px 0 0; text-align: center; color: var(--text-faint); font-size: 12.5px; }
 [data-game="klotski"] .board-area { max-width: 480px; margin-inline: auto; }
+
+/* ---------------- 数织 ----------------
+ * 四宫格：左上留白、上方列线索、左侧行线索、右下网格。
+ * 线索区大小由最长的那条线索决定，格子边长在 JS 里按总宽反推。
+ */
+.ng-wrap { display: flex; justify-content: center; padding: 6px 0; }
+.ng-board {
+  display: grid;
+  margin: 0 auto;
+  background: var(--border);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  overflow: hidden;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.ng-corner { grid-area: 1 / 1; background: var(--bg-soft); }
+.ng-cols { grid-area: 1 / 2; display: grid; background: var(--surface-2); }
+.ng-rows { grid-area: 2 / 1; display: grid; background: var(--surface-2); }
+.ng-grid { grid-area: 2 / 2; display: grid; }
+.ng-clue {
+  display: grid;
+  place-items: center;
+  font-size: calc(var(--cell, 28px) * 0.52);
+  font-weight: 650;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  transition: color .15s, opacity .15s;
+}
+/* 这一行/列的实心段已经和线索完全一致——灰掉，一眼看出哪几行做完了 */
+.ng-clue.is-done { color: var(--text-faint); opacity: .35; }
+.ng-cell {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  position: relative;
+  transition: background .1s;
+}
+.ng-cell.is-g5c { border-right: 2px solid var(--border-strong); }
+.ng-cell.is-g5r { border-bottom: 2px solid var(--border-strong); }
+.ng-cell.is-fill { background: var(--text); }
+.ng-cell.is-mark { background: var(--surface-2); }
+.ng-cell.is-mark::after {
+  content: '×';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  font-size: calc(var(--cell, 28px) * 0.6);
+  line-height: 1;
+}
+.ng-cell.is-ref { box-shadow: inset 0 0 0 2px var(--accent); z-index: 1; }
+.ng-cell.is-wrong { background: var(--danger); }
+.ng-art-wrap { display: flex; justify-content: center; padding: 8px 0 4px; }
+.ng-art { display: grid; gap: 1px; }
+.ng-art i { display: block; border-radius: 1px; }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 12px; }
+.gallery-item {
+  appearance: none;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+.gallery-item:hover { border-color: var(--accent); background: var(--surface-2); }
+.gallery-item .gal-size { color: var(--text-faint); font-size: 12px; }
+[data-game="nonogram"] .board-area { max-width: 640px; margin-inline: auto; }

@@ -1529,21 +1529,24 @@ async function main() {
     const G = SD.G2048;
     G.app.startLevel('classic');
     await new Promise(r => setTimeout(r, 300));
+    // 打到"这局结束"为止。注意结束有两种：先凑出目标牌（won，还能接着打）和推不动了（over）。
+    // 只认 over 的话，求解器水平一好这条就会假失败——它常常先到 2048 再一路打下去。
     let guard = 0;
-    // 求解器自己打一局要一千步上下（实测 964~1142 步），700 步根本到不了结算
-    while (G.app.getBoard().state !== 'over' && guard++ < 1600) {
+    while (guard++ < 2500) {
+      if (G.app.getBoard().state === 'over') break;
       const r = G.app.rank();
       if (!r.length) break;
       G.app.move(r[0].dir);
     }
     await new Promise(r => setTimeout(r, 600));
     const b = G.app.getBoard();
-    const box = document.querySelector('#dialog-root .modal');
+    const all = document.querySelectorAll('#dialog-root .modal');
+    const box = all[all.length - 1];
     const title = box ? box.querySelector('h2').textContent : '';
-    const close = box ? box.querySelector('.modal-head .btn') : null;
-    if (close) close.click();
+    for (const m of all) { const x = m.querySelector('.modal-head .btn'); if (x) x.click(); }
     const rec = SD.G2048.store.best('classic');
-    return { ok: b.state === 'over' && b.score > 500 && G.maxTile(b) >= 256 && rec >= b.score,
+    const settled = b.state === 'over' || b.state === 'won';
+    return { ok: settled && /2048|可推的方向/.test(title) && b.score > 500 && G.maxTile(b) >= 256 && rec >= b.score,
              info: guard + ' 步，状态 ' + b.state + '，得分 ' + b.score + '，最大牌 ' + G.maxTile(b) + '，弹窗「' + title + '」，记录 ' + rec };
   })()`, 200000);
 
@@ -1624,6 +1627,90 @@ async function main() {
              info: '走了 ' + b.moves + ' 步（标注最少 ' + target + '），弹窗「' + title + '」（当时共 ' + count + ' 个），记录 ' + (best ? best.moves : '无') };
   })()`, 120000);
 
+  /* ================= 数织 ================= */
+
+  await step('标题页把数织列为可进入', `(async function(){
+    document.getElementById('btn-home').click();
+    await new Promise(r => setTimeout(r, 200));
+    const card = Array.from(document.querySelectorAll('.game-card'))
+      .find((c) => c.querySelector('.gc-name').textContent === '数织');
+    if (!card) return { ok: false, info: '没有卡片' };
+    const soon = card.classList.contains('is-soon');
+    card.click();
+    await new Promise(r => setTimeout(r, 200));
+    const title = document.querySelector('.home-title');
+    return { ok: !soon && !!title && title.textContent === '数织',
+             info: '置灰=' + soon + '，首页标题=' + (title ? title.textContent : '无') };
+  })()`);
+
+  await step('数织：开局画出网格和行列线索，且不泄露图名', `(async function(){
+    document.querySelector('.home-item[data-go=medium]').click();
+    await new Promise(r => setTimeout(r, 400));
+    const N = SD.Nonogram;
+    const b = N.app.getBoard();
+    const cells = document.querySelectorAll('.ng-cell').length;
+    const clues = document.querySelectorAll('.ng-clue').length;
+    // 图名就是谜底，对局中不能出现在界面上
+    const leaked = document.body.innerText.indexOf(b.name) >= 0;
+    return { ok: cells === b.w * b.h && clues > 0 && !leaked,
+             info: b.w + '×' + b.h + '，' + cells + ' 格，' + clues + ' 个线索位，图名泄露=' + leaked };
+  })()`);
+
+  await step('数织：提示的结论必须和真解一致', `(function(){
+    const N = SD.Nonogram;
+    let wrong = 0, steps = 0;
+    for (let k = 0; k < 40; k++) {
+      const b = N.app.getBoard();
+      if (b.state === 'won') break;
+      const s = N.app.hint();
+      if (!s || s.dead) break;
+      steps++;
+      for (const idx of s.filled) {
+        const i = N.hints.toBoard(b, s, idx);
+        if (!b.solution[i]) wrong++;                 // 说实心却是空 → 严重错误
+        if (b.cells[i] === 0) N.setCell(b, i, 1);
+      }
+      for (const idx of s.marked) {
+        const i = N.hints.toBoard(b, s, idx);
+        if (b.solution[i]) wrong++;
+        if (b.cells[i] === 0) N.setCell(b, i, 2);
+      }
+      N.app.render();
+    }
+    return { ok: wrong === 0 && steps > 0, info: '推了 ' + steps + ' 步，和真解冲突 ' + wrong + ' 格' };
+  })()`);
+
+  await step('数织：沿提示推完会结算并记进画册', `(async function(){
+    const N = SD.Nonogram;
+    N.app.startLevel('easy', 'browser-auto');
+    await new Promise(r => setTimeout(r, 200));
+    let guard = 0;
+    while (guard++ < 200) {
+      const b = N.app.getBoard();
+      if (b.state === 'won') break;
+      const s = N.app.hint();
+      if (!s || s.dead) break;
+      for (const idx of s.filled) {
+        const i = N.hints.toBoard(b, s, idx);
+        if (b.cells[i] !== 1) N.app.tap(i, { button: 0 });   // 走 app 的入口，结算才会触发
+      }
+      if (N.app.getBoard().state === 'won') break;
+      for (const idx of s.marked) {
+        const i = N.hints.toBoard(b, s, idx);
+        if (b.cells[i] !== 2) N.setCell(b, i, 2);
+      }
+    }
+    await new Promise(r => setTimeout(r, 300));
+    const all = document.querySelectorAll('#dialog-root .modal');
+    const box = all[all.length - 1];
+    const title = box ? box.querySelector('h2').textContent : '';
+    const art = document.querySelectorAll('.ng-art i').length;
+    for (const m of all) { const x = m.querySelector('.modal-head .btn'); if (x) x.click(); }
+    const rev = SD.Nonogram.store.revealed();
+    return { ok: N.app.getBoard().state === 'won' && /解出来了/.test(title) && art > 0 && rev.length > 0,
+             info: '弹窗「' + title + '」，揭晓图 ' + art + ' 格，画册 ' + rev.length + ' 张（' + rev.map((x) => x.name).join('、') + '）' };
+  })()`, 120000);
+
   /* ================= 导航 ================= */
 
   await step('从对局页能一路退回标题页换游戏', `(async function(){
@@ -1639,16 +1726,16 @@ async function main() {
     const atTitle = document.documentElement.getAttribute('data-view');
     const cards = document.querySelectorAll('.game-card').length;
     const clickable = Array.from(document.querySelectorAll('.game-card')).filter((c) => !c.classList.contains('is-soon')).length;
-    return { ok: atHome === 'home' && atTitle === 'title' && cards === 6 && clickable === 6,
+    return { ok: atHome === 'home' && atTitle === 'title' && cards === 7 && clickable === 7,
              info: '对局页 → ' + atHome + ' → ' + atTitle + '，标题页 ' + cards + ' 张卡片（' + clickable + ' 张可进入）' };
   })()`);
 
   // 全程同步：enter() / leave() 本来就是同步改视图的，不需要等定时器。
   // 原先这里每款游戏都 await 两次 setTimeout，在无头浏览器里被节流拉到几十秒一次，
   // 五次就是几分钟——超时被中断，而打点显示其实早就走完了。
-  await step('六款游戏都能进能出', `(function(){
+  await step('七款游戏都能进能出', `(function(){
     const out = [];
-    for (const name of ['数独', '杀手数独', '扫雷', '数字华容道', '2048', '华容道']) {
+    for (const name of ['数独', '杀手数独', '扫雷', '数字华容道', '2048', '华容道', '数织']) {
       const card = Array.from(document.querySelectorAll('.game-card'))
         .find((c) => c.querySelector('.gc-name').textContent === name);
       if (!card) { out.push(name + ':没有卡片'); continue; }
