@@ -26,18 +26,20 @@
     let hooks = { start: null, at: null, end: null };
     let painting = false;
 
-    /** 一行当前实心段 —— 和线索完全一致时把线索灰掉，玩家一眼看出这行做完了 */
-    function runsOf(vals) {
-      const out = [];
-      let n = 0;
-      for (const v of vals) {
-        if (v === FILLED) n++;
-        else { if (n) out.push(n); n = 0; }
+    /**
+     * 这一行/列是不是真的做对了 —— 逐格和真解比。
+     *
+     * 早先比的是"实心段长度和线索对不对得上"。那个判据有歧义：一行里 2 个格子位置放错了，
+     * 长度仍然是 2，于是**行线索变淡、列线索不变淡**——两边都没算错，但玩家看到的是
+     * "左边完成了上面没有"，像坏了。
+     * 换成按真解判，两个方向必然一致：错了的行和列都不会变淡。
+     */
+    function lineDone(b, vals, indexOf) {
+      for (let i = 0; i < vals.length; i++) {
+        if ((vals[i] === FILLED) !== !!b.solution[indexOf(i)]) return false;
       }
-      if (n) out.push(n);
-      return out;
+      return true;
     }
-    const sameRuns = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
 
     function fit(b) {
       const cw = Math.max.apply(null, b.clues.rows.map((c) => c.length).concat([1]));
@@ -173,15 +175,14 @@
         c.classList.toggle('is-mark', v === MARKED);
         c.classList.toggle('is-wrong', !!(state && state.wrong && state.wrong.has(i)));
       }
-      // 线索灰化：这一行/列的实心段已经和线索完全一致
+      // 线索灰化：这一行/列**填对了**（逐格对真解），不是"长度凑上了"
+      // 行按下标 i → r*w+i，列按 i → i*w+c。两边的下标公式不一样，写错过一次。
       for (let r = 0; r < b.h; r++) {
-        const vals = N.rowOf(b, r);
-        const done = sameRuns(runsOf(vals), b.clues.rows[r].filter((v) => v !== 0));
+        const done = lineDone(b, N.rowOf(b, r), (i) => r * b.w + i);
         for (const it of clueEls.rows[r]) it.node.classList.toggle('is-done', done);
       }
       for (let c = 0; c < b.w; c++) {
-        const vals = N.colOf(b, c);
-        const done = sameRuns(runsOf(vals), b.clues.cols[c].filter((v) => v !== 0));
+        const done = lineDone(b, N.colOf(b, c), (i) => i * b.w + c);
         for (const it of clueEls.cols[c]) it.node.classList.toggle('is-done', done);
       }
     }

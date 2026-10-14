@@ -1736,6 +1736,51 @@ async function main() {
              info: '线索格不对 ' + bad + ' 处、位置不对 ' + posBad + ' 处、装不下的线索 ' + impossible + ' 条' + (detail ? '（' + detail + '）' : '') };
   })()`);
 
+  // 回归：线索灰化原先比的是"实心段长度和线索对不对得上"。
+  // 一行里 2 个格子位置放错了长度仍然是 2，于是行线索变淡、列线索不变淡——
+  // 玩家看到"左边完成了上面没有"，像坏了。现在按真解逐格判，两个方向必然一致。
+  await step('数织：线索灰化按真解判定，行列不会互相矛盾', `(function(){
+    const N = SD.Nonogram;
+    N.app.startLevel('medium', 'gray-1');
+    const b = N.app.getBoard();
+    const rowsEl = document.querySelector('.ng-rows');
+    const colsEl = document.querySelector('.ng-cols');
+    const clueDone = (el, r) => {
+      const nodes = Array.from(el.children).filter((n) => n.style.gridRow === String(r + 1) && n.textContent);
+      return nodes.length ? nodes.every((n) => n.classList.contains('is-done')) : true;
+    };
+    const colDone = (c) => {
+      const nodes = Array.from(colsEl.children).filter((n) => n.style.gridColumn === String(c + 1) && n.textContent);
+      return nodes.length ? nodes.every((n) => n.classList.contains('is-done')) : true;
+    };
+    // 1) 填满真解 → 行列全灰
+    for (let i = 0; i < b.cells.length; i++) N.setCell(b, i, b.solution[i] ? 1 : 0);
+    N.app.render();
+    let allGray = true;
+    for (let r = 0; r < b.h; r++) if (!clueDone(rowsEl, r)) allGray = false;
+    for (let c = 0; c < b.w; c++) if (!colDone(c)) allGray = false;
+
+    // 2) 找一段长度≥2 的实心段，把它整体右移一格（长度不变、位置变了）
+    let target = null;
+    for (let r = 0; r < b.h && !target; r++) {
+      const cells = N.rowOf(b, r);
+      for (let c = 0; c + 2 < b.w; c++) {
+        if (cells[c] === 1 && cells[c + 1] === 1 && cells[c + 2] === 0) { target = { r: r, c: c }; break; }
+      }
+    }
+    if (!target) return { ok: false, info: '没找到可移动的实心段' };
+    N.setCell(b, target.r * b.w + target.c, 0);
+    N.setCell(b, target.r * b.w + target.c + 2, 1);
+    N.app.render();
+    const rowGray = clueDone(rowsEl, target.r);
+    // 这一步把盘面改成了错的，后面的用例还要用，所以换一张新的
+    N.app.startLevel('medium', 'gray-2');
+    // 旧逻辑下这一行长度仍是 2，会被判成"做完"；新逻辑必须判成没做完
+    return { ok: allGray && !rowGray,
+             info: '填满真解时行列全灰=' + allGray
+               + '；把第 ' + (target.r + 1) + ' 行的 2 连块整体右移一格后，该行仍被判为完成=' + rowGray + '（应为 false）' };
+  })()`);
+
   await step('数织：拖拽可以批量填格', `(function(){
     const N = SD.Nonogram;
     const b = N.app.getBoard();
