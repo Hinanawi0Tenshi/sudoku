@@ -283,11 +283,14 @@
     const data = ctx.getImageData(cell.x0, cell.y0, w, h);
     const px = data.data;
 
-    // 墨迹包围盒
-    let x0 = w, y0 = h, x1 = -1, y1 = -1;
+    // 墨迹包围盒 + 墨迹像素数 + 墨色总和（后者用来区分印刷体和铅笔）
+    let x0 = w, y0 = h, x1 = -1, y1 = -1, inkCount = 0, inkSum = 0;
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
-        if (px[(y * w + x) * 4] >= cell.thr) continue;
+        const o = (y * w + x) * 4;
+        if (px[o] >= cell.thr) continue;
+        inkCount++;
+        inkSum += (px[o] * 299 + px[o + 1] * 587 + px[o + 2] * 114) / 1000;
         if (x < x0) x0 = x;
         if (x > x1) x1 = x;
         if (y < y0) y0 = y;
@@ -305,7 +308,16 @@
     // 固定比例会把真线索一起挡掉（实测照片场景从 28% 掉到 9%）。
     // 改用「本图里较大的那一簇」当线索：线索字明显大于笔记小字，
     // 按当图的分布取分界，才扛得住不同清晰度的照片。
-    const isGiven = big >= cellSize * (state.givenRatio || 0.34);
+    const sizeOk = big >= cellSize * (state.givenRatio || 0.34);
+    // 第二道闸门：墨色。
+    // 尺寸判据有个天生缺陷——候选数是 3x3 铺满整格的小字，**包围盒反而比线索字大**，
+    // 会被当成大字放进来（实测 32 个线索的图上多出 15 个）。
+    // 墨色是另一个正交信号，而且和清晰度无关（模糊会让整体一起变浅，相对深浅还在）：
+    // 实测印刷题面 22~41，铅笔小字 133~152，差 90 个灰阶。
+    // 只在分布出现明显断层时才启用——纯印刷体的图不该被这条误伤。
+    const inkMean = inkSum / inkCount;
+    const inkOk = state.givenInk == null || inkMean <= state.givenInk;
+    const isGiven = sizeOk && inkOk;
 
     // 四周留白：字形大小要接近训练时的比例，太贴边会掉识别率
     const pad = Math.max(2, Math.round(Math.max(x1 - x0, y1 - y0) * 0.28));
@@ -355,6 +367,11 @@
     o.putImageData(img, 0, 0);
     c.isGiven = isGiven;   // true=印刷体线索，false=小字笔记
     c.inkSize = big / cellSize;
+    c.inkMean = inkMean;
+    // 两个判据分开带出去：只有墨色明确判定为手写的格子才该被排除，
+    // 尺寸单独否决的不可靠（模糊照片上真线索也会被它挡掉，还得靠整幅兜底救回来）
+    c.inkOk = inkOk;
+    c.sizeOk = sizeOk;
     return c;
   }
 
@@ -364,9 +381,11 @@
     // 只看有墨迹的格——空格子没有尺寸可言。
     {
       const sizes = [];
+      const inks = [];
       for (const cell of state.extracted.cells) {
         const probe = cropCell(ctx, cell, 16);
         if (probe && probe.inkSize) sizes.push(probe.inkSize);
+        if (probe && probe.inkMean != null) inks.push(probe.inkMean);
       }
       sizes.sort((a, b) => a - b);
       if (sizes.length >= 4) {
@@ -374,6 +393,22 @@
         const q = sizes[Math.floor(sizes.length * 0.75)];
         const med = sizes[Math.floor(sizes.length * 0.5)];
         state.givenRatio = Math.max(0.20, Math.min(0.60, (q + med) / 2));
+      }
+      // 墨色分界：找排序后相邻两项之间的**最大间隙**。断层明显才启用。
+      // 纯印刷体的图墨色连成一片，最大间隙很小，这条不会生效（不会误伤）。
+      inks.sort((a, b) => a - b);
+      state.givenInk = null;
+      if (inks.length >= 8) {
+        let gi = -1, gap = 0;
+        for (let i = 1; i < inks.length; i++) {
+          const g = inks[i] - inks[i - 1];
+          // 两侧都要有足够的样本，否则"间隙"可能只是单个离群点
+          if (g > gap && i >= 4 && inks.length - i >= 4) { gap = g; gi = i; }
+        }
+        // 门槛 60 是量出来的：真实场景里印刷体 22~41、铅笔小字 133~152，间隙 90+；
+        // 而照片经 JPEG 压缩后有些格子的墨迹会被压浅，形成 30~50 的假断层——
+        // 门槛定 30 时照片场景会误触发，正确数从 8 掉到 6。
+        if (gi > 0 && gap >= 60) state.givenInk = (inks[gi - 1] + inks[gi]) / 2;
       }
     }
     const hits = new Array(81).fill(null);
@@ -386,8 +421,13 @@
       tried++;
       const tile = cropCell(ctx, cell, 64);
       if (!tile) continue;   // 这格没墨迹，交给整幅识别兜底
-      // 小字笔记不是题面的一部分，不送进 OCR 当线索
-      if (!tile.isGiven) { pencils.push(cell); continue; }
+      // 小字笔记不是题面的一部分，不送进 OCR 当线索。
+      // 但只有"墨色判定为手写"才算数——尺寸单独否决的格子仍可能真线索，
+      // 留给整幅兜底去救（照片场景全靠这条，一刀切会把正确数从 8 砍到 6）。
+      if (!tile.isGiven) {
+        if (!tile.inkOk) pencils.push(cell);
+        continue;
+      }
       const r = await worker.recognize(tile, {}, { blocks: false, tsv: false, text: true });
       const d = onlyDigit((r.data && r.data.text) || '');
       if (d) hits[cell.index] = { digit: d, conf: (r.data && r.data.confidence) || 0 };
@@ -411,7 +451,9 @@
     }
 
     log('策略A 逐格识别：尝试 ' + tried + ' 格，命中 ' + hits.filter(Boolean).length + '（需重试 ' + retry.length + '）');
-    return hits;
+    // 判为笔记的格子一并带出去：策略B（整幅兜底）没有墨色闸门，
+    // 不显式排除的话这些格子会从那条路重新填回来（实测漏了 7 个）。
+    return { hits: hits, pencil: pencils.map((c) => c.index) };
   }
 
   /* ---------------- 策略 B：整幅识别（兜底） ---------------- */
@@ -463,9 +505,12 @@
 
       const worker = await ensureWorker();
       let perCell = null;
+      let pencilSet = new Set();
       let whole = null;
       try {
-        perCell = await recognizePerCell(worker);
+        const a = await recognizePerCell(worker);
+        perCell = a.hits;
+        pencilSet = new Set(a.pencil);
       } catch (e) {
         log('逐格识别失败：' + e.message);
         perCell = new Array(81).fill(null);
@@ -480,6 +525,13 @@
 
       let hits = 0;
       for (let i = 0; i < 81; i++) {
+        // 判为铅笔笔记的格子一律留空：整幅兜底路径分不出印刷体和手写，
+        // 不排除的话会把候选数当成线索填进来
+        if (pencilSet.has(i)) {
+          state.digits[i] = 0;
+          state.confidences[i] = -1;
+          continue;
+        }
         const hp = perCell[i];
         const hw = whole[i];
         // 逐格结果只要置信度不是极低就直接采信，否则用整幅结果兜底

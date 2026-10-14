@@ -130,7 +130,7 @@ const SCORE = `(async function () {
       + ',conf=' + Math.round(s.confidences[i]));
   }
   return { total: f.givens.filter(Boolean).length, right, wrong, missing, extra, low, extraInfo,
-    givenRatio: s.givenRatio,
+    givenRatio: s.givenRatio, givenInk: s.givenInk,
     log: (document.querySelector('.ocr-log')||{}).textContent || '',
     status: (document.querySelector('.ocr-status')||{}).textContent || '' };
 })()`;
@@ -192,7 +192,7 @@ const SCORE = `(async function () {
     console.log('  ' + (mode === 'clean' ? '[干净图]' : mode === 'notes' ? '[笔记  ]' : '[照片  ]') + ' 题面 ' + r.total + ' 个数字 → 正确 ' + r.right + '（' + pct + '%）、误识 ' + r.wrong + '、漏识 ' + r.missing + '、多出 ' + r.extra + '，待人工确认 ' + r.low + ' 格');
     console.log('           ' + String(r.log).trim().split('\n').filter(Boolean).join(' / '));
     console.log('           尺寸分界 givenRatio=' + (r.givenRatio != null ? Number(r.givenRatio).toFixed(3) : '未设置')
-      + '（低于它的墨迹块当笔记丢掉）');
+      + '，墨色分界 givenInk=' + (r.givenInk != null ? Number(r.givenInk).toFixed(0) : '未启用'));
     results[mode] = r;
   }
   // 干净合成图是识别准确率的红线：透视校正、切格、二值化、逐格 OCR 全在里面。
@@ -204,16 +204,11 @@ const SCORE = `(async function () {
   // 笔记场景是硬门禁：题面必须全对，且铅笔小字一个都不能被当成线索读进来
   // （读进来就是"多出"，玩家会看到凭空冒出的数字和满盘冲突）
   console.log('\n  ' + (passClean ? '✓ 干净图识别 100% 正确、0 误识' : '✗ 干净图识别未达标'));
-  // 笔记场景目前只做观察，不当门禁。
-  // 已知问题：尺寸闸门量的是「墨迹包围盒」，而候选数是 3x3 铺满整格的小字，
-  // 包围盒反而比线索字还大，于是有一部分被当成线索读进来（实测多出 7 个）。
-  // 试过改用连通块大小，笔记场景从 15 降到 7，但照片场景被误伤（正确 8→6），
-  // 那是更严重的回归，所以先回退。这条留在这里记录现状，等有更好的判据再收紧。
-  if (n) {
-    console.log('  ' + (n.extra === 0 ? '✓ 笔记场景：题面全对、铅笔小字 0 泄漏'
-      : '· 笔记场景：题面 ' + n.right + '/' + n.total + ' 全对，但铅笔小字多出 ' + n.extra + ' 个（已知限制）'));
-  }
-  const pass = passClean;
+  // 笔记场景也是硬门禁：题面必须全对，铅笔小字一个都不能被当成线索读进来。
+  // 靠的是"墨色"这道正交闸门（尺寸闸门单独扛不住——候选数铺开后包围盒比线索字还大）。
+  const passNotes = !!n && n.right === n.total && n.wrong === 0 && n.extra === 0;
+  console.log('  ' + (passNotes ? '✓ 笔记场景：题面全对、铅笔小字 0 泄漏' : '✗ 笔记场景未达标'));
+  const pass = passClean && passNotes;
   ws.close(); b.kill();
   try { require('fs').rmSync(profile, { recursive: true, force: true }); } catch (e) {}
   process.exit(pass ? 0 : 1);
