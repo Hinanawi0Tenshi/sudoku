@@ -283,18 +283,27 @@
     const data = ctx.getImageData(cell.x0, cell.y0, w, h);
     const px = data.data;
 
-    // 墨迹包围盒 + 墨迹像素数 + 墨色总和（后者用来区分印刷体和铅笔）
+    // 两套统计，用途不同：
+    //   ① 全格墨迹包围盒——给 OCR 裁剪用。网格线也在里面无所谓，裁的是"哪里有字"。
+    //   ② 去掉边缘一圈的统计（像素数、墨色）——给"印刷体还是手写"判别用。
+    //      网格线又黑又长，混进来会把统计量整个带偏（实测印刷的单个数字被量成
+    //      1~6 个连通块、平均墨色被拉黑，判据全都失效）。
+    const mx = Math.max(1, Math.round(w * 0.06));
+    const my = Math.max(1, Math.round(h * 0.06));
     let x0 = w, y0 = h, x1 = -1, y1 = -1, inkCount = 0, inkSum = 0;
     for (let y = 0; y < h; y++) {
+      const inner = y >= my && y < h - my;
       for (let x = 0; x < w; x++) {
         const o = (y * w + x) * 4;
         if (px[o] >= cell.thr) continue;
-        inkCount++;
-        inkSum += (px[o] * 299 + px[o + 1] * 587 + px[o + 2] * 114) / 1000;
         if (x < x0) x0 = x;
         if (x > x1) x1 = x;
         if (y < y0) y0 = y;
         if (y > y1) y1 = y;
+        if (inner && x >= mx && x < w - mx) {
+          inkCount++;
+          inkSum += (px[o] * 299 + px[o + 1] * 587 + px[o + 2] * 114) / 1000;
+        }
       }
     }
     if (x1 < 0) return null;   // 没墨迹
@@ -409,12 +418,17 @@
         // 而照片经 JPEG 压缩后有些格子的墨迹会被压浅，形成 30~50 的假断层——
         // 门槛定 30 时照片场景会误触发，正确数从 8 掉到 6。
         if (gi > 0 && gap >= 60) state.givenInk = (inks[gi - 1] + inks[gi]) / 2;
+        // 打日志：闸门没触发时，得能看出是"墨色本来就连成一片"还是"阈值卡太死"
+        log('墨色分布：' + inks.length + ' 格，' + Math.round(inks[0]) + '~' + Math.round(inks[inks.length - 1])
+          + '，最大间隙 ' + Math.round(gap) + (state.givenInk != null
+            ? '，分界 ' + Math.round(state.givenInk) + '（启用）' : '（不足 60，未启用）'));
       }
     }
     const hits = new Array(81).fill(null);
     const retry = [];
     const pencils = [];   // 判为用户小字笔记的格子
     let tried = 0;
+    let byTemplate = 0, byOcr = 0;
 
     for (const cell of state.extracted.cells) {
       if (cell.ink < 0.008) continue;
@@ -428,6 +442,15 @@
         if (!tile.inkOk) pencils.push(cell);
         continue;
       }
+      // 先用模板匹配：零依赖、几毫秒一格，而且"按字形比"天然不吃上下文。
+      // 分够高就直接采信，不够才退回 Tesseract（那 17MB 的包留着当兜底）。
+      const m = SD.Sudoku.digit.match(tile);
+      if (m && m.score >= 0.62 && m.margin >= 0.06) {
+        hits[cell.index] = { digit: m.digit, conf: 60 + m.score * 40 };
+        byTemplate++;
+        continue;
+      }
+      byOcr++;
       const r = await worker.recognize(tile, {}, { blocks: false, tsv: false, text: true });
       const d = onlyDigit((r.data && r.data.text) || '');
       if (d) hits[cell.index] = { digit: d, conf: (r.data && r.data.confidence) || 0 };
@@ -450,7 +473,8 @@
       await worker.setParameters({ tessedit_char_whitelist: '0123456789', tessedit_pageseg_mode: '10' });
     }
 
-    log('策略A 逐格识别：尝试 ' + tried + ' 格，命中 ' + hits.filter(Boolean).length + '（需重试 ' + retry.length + '）');
+    log('策略A 逐格识别：尝试 ' + tried + ' 格，命中 ' + hits.filter(Boolean).length
+      + '（模板匹配 ' + byTemplate + ' 格 / 退回 OCR ' + byOcr + ' 格 / 需重试 ' + retry.length + '）');
     // 判为笔记的格子一并带出去：策略B（整幅兜底）没有墨色闸门，
     // 不显式排除的话这些格子会从那条路重新填回来（实测漏了 7 个）。
     return { hits: hits, pencil: pencils.map((c) => c.index) };
