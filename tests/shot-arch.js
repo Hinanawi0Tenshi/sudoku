@@ -139,6 +139,24 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     + ' const c = document.querySelector(".killer-demo .cell"); const s = document.querySelector(".killer-demo .cell-cage");'
     + ' return v ? getComputedStyle(v).fontSize + " / 格宽 " + Math.round(c.getBoundingClientRect().width) + "px / 笼和 " + getComputedStyle(s).fontSize : "无"; })()'));
 
+  // 后四款：都是「平台层一行没改」加进来的，截图也走同一套流程
+  for (const g of [
+    { name: '数字华容道', level: 'n4', file: 'shot-slide-play.png', wait: 400 },
+    { name: '2048', level: 'classic', file: 'shot-g2048-play.png', wait: 400 },
+    { name: '华容道', level: 'hard', file: 'shot-klotski-play.png', wait: 1400 },
+    { name: '数织', level: 'medium', file: 'shot-nonogram-play.png', wait: 400 },
+  ]) {
+    await ev('document.getElementById("btn-home").click()');
+    await sleep(300);
+    await ev('Array.from(document.querySelectorAll(".game-card")).find((c) => c.querySelector(".gc-name").textContent === "'
+      + g.name + '").click()');
+    await sleep(400);
+    await shot(g.file.replace('-play', '-home'));
+    await ev('document.querySelector(".home-item[data-go=' + g.level + ']").click()');
+    await sleep(g.wait);
+    await shot(g.file);
+  }
+
   ws.close(); b.kill();
   process.exit(0);
 })().catch((e) => { console.error('失败: ' + (e && e.message) + '\n' + (e && e.stack)); process.exit(1); });

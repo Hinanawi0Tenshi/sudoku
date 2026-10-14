@@ -172,6 +172,9 @@
     for (const def of SD.Registry.all()) grid.appendChild(gameCard(def));
     const total = SD.Points.total();
     $('#title-points').textContent = total ? '通关点数 ' + total : '';
+    // 副标题从注册表生成。原先写死在 index.html 里，加到第七款游戏时它还写着三款。
+    const sub = $('#title-sub');
+    if (sub) sub.textContent = SD.Registry.ready().map((d) => d.name).join(' · ');
   }
 
   function gameCard(def) {
