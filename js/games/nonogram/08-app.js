@@ -167,7 +167,7 @@
     ]));
 
     view = N.view.create($('#n-mount'));
-    view.onTap(onTap);
+    view.onPaint({ start: paintStart, at: paintAt, end: paintEnd });
   }
 
   function renderStatus() {
@@ -206,15 +206,51 @@
   function stopTimer() { if (timer) { clearInterval(timer); timer = null; } }
 
   /* ---------------- 操作 ---------------- */
-  function onTap(i, e) {
+  /**
+   * 拖拽批量填格。
+   *
+   * 单点一下还是原来的行为（填/取消），但按住划过去会**把划过的格子一起处理**——
+   * 20×20 一个个点要六百多次，实在受不了。
+   * 操作类型由**第一格**决定：第一格本来是空的就一路填，本来是实心的就一路清。
+   * 这样"按住拖过去擦掉一片"和"按住拖过去填一片"都很自然。
+   */
+  let paintMode = null;
+
+  function paintValue() {
+    if (paintMode === 'fill') return FILLED;
+    if (paintMode === 'mark') return MARKED;
+    return UNKNOWN;
+  }
+
+  function paintStart(i, rightClick) {
     if (!board || board.state === 'won') return;
-    const rightClick = e && e.button === 2;
-    const asMark = markMode !== rightClick;      // 标记模式下左键打叉；普通模式下右键打叉
-    if (asMark) N.mark(board, i);
-    else N.toggle(board, i);
-    render();
+    const cur = board.cells[i];
+    const asMark = markMode !== !!rightClick;    // 标记模式下左键打叉；普通模式下右键打叉
+    if (asMark) paintMode = cur === MARKED ? 'clear' : 'mark';
+    else paintMode = cur === FILLED ? 'clear' : 'fill';
+    paintAt(i);
+  }
+
+  function paintAt(i) {
+    if (!board || board.state === 'won' || !paintMode) return;
+    const want = paintValue();
+    if (board.cells[i] === want) return;
+    N.setCell(board, i, want);
+    if (view) view.touch(i);
+  }
+
+  function paintEnd() {
+    if (!paintMode) return;
+    paintMode = null;
+    render();                 // 收尾整块重画：线索灰化之类要跟着更新
     scheduleSave();
     if (N.isComplete(board)) finish();
+  }
+
+  /** 单击一格——测试和键盘调用走这条 */
+  function onTap(i, e) {
+    paintStart(i, e && e.button === 2);
+    paintEnd();
   }
 
   function check() {

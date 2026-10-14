@@ -18,6 +18,8 @@
     root.appendChild(box);
     let cell = 80;
     let els = [];
+    let exitFill = null;
+    let exitFrame = null;
     let onPick = null;
 
     function fit() {
@@ -31,6 +33,20 @@
 
     function place(b) {
       const size = cell - PAD * 2;
+      // 出口：曹操要落到的 2×2 位置（左上角在 (3,1)）
+      if (exitFill) {
+        const w = 2 * cell - PAD * 2;
+        const h = 2 * cell - PAD * 2;
+        const tf = 'translate(' + (1 * cell + PAD) + 'px,' + (3 * cell + PAD) + 'px)';
+        for (const n of [exitFill, exitFrame]) {
+          n.style.width = w + 'px';
+          n.style.height = h + 'px';
+          n.style.transform = tf;
+        }
+        const done = b.pieces[0].r === 3 && b.pieces[0].c === 1;
+        exitFill.classList.toggle('is-open', done);
+        exitFrame.classList.toggle('is-open', done);
+      }
       for (let i = 0; i < b.pieces.length; i++) {
         const p = b.pieces[i];
         const n = els[i];
@@ -44,6 +60,16 @@
     function build(b) {
       clear(box);
       fit();
+      // 出口分两层画：
+      //   底层是"门洞"（光晕 + 文字），棋子压上去就看不见了，但空着时一眼能看到目标在哪；
+      //   顶层是金色虚线框，永远盖在最上面——不然曹操一旦挪过来，整个标记就被自己挡没了。
+      exitFill = el('div.k-exit', null, [
+        el('span.k-exit-arrow', { text: '▼' }),
+        el('span.k-exit-txt', { text: '出口' }),
+      ]);
+      exitFrame = el('div.k-exit-frame');
+      box.appendChild(exitFill);
+      box.appendChild(exitFrame);
       els = [];
       for (let i = 0; i < b.pieces.length; i++) {
         const p = b.pieces[i];
@@ -54,6 +80,16 @@
         n.addEventListener('pointerdown', (e) => { if (onPick) onPick(i, e); });
         els.push(n);
         box.appendChild(n);
+      }
+      // 每格画一道浅线，空位才看得出是"格子"而不是背景
+      for (let r = 0; r < K.H; r++) {
+        for (let c = 0; c < K.W; c++) {
+          const g = el('i.k-slot');
+          g.style.width = (cell - PAD * 2) + 'px';
+          g.style.height = (cell - PAD * 2) + 'px';
+          g.style.transform = 'translate(' + (c * cell + PAD) + 'px,' + (r * cell + PAD) + 'px)';
+          box.appendChild(g);
+        }
       }
       place(b);
     }

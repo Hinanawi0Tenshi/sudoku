@@ -19,10 +19,12 @@
     const box = el('div.ng-board');
     root.appendChild(box);
     let cell = 30;
+    let bw = 0, bh = 0;
     let grid = null;
     let cellEls = [];
     let clueEls = { rows: [], cols: [] };
-    let onTap = null;
+    let hooks = { start: null, at: null, end: null };
+    let painting = false;
 
     /** 一行当前实心段 —— 和线索完全一致时把线索灰掉，玩家一眼看出这行做完了 */
     function runsOf(vals) {
@@ -55,6 +57,30 @@
       return { cw: cw, ch: ch };
     }
 
+    /** 屏幕坐标落在哪一格上——拖拽批量填格要用 */
+    function cellAt(clientX, clientY) {
+      if (!grid) return -1;
+      const r = grid.getBoundingClientRect();
+      const c = Math.floor((clientX - r.left) / cell);
+      const row = Math.floor((clientY - r.top) / cell);
+      if (c < 0 || row < 0 || c >= bw || row >= bh) return -1;
+      return row * bw + c;
+    }
+
+    function onMove(e) {
+      if (!painting) return;
+      const i = cellAt(e.clientX, e.clientY);
+      if (i >= 0 && hooks.at) hooks.at(i);
+    }
+    function onUp() {
+      if (!painting) return;
+      painting = false;
+      if (hooks.end) hooks.end();
+    }
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
+
     function build(b) {
       clear(box);
       const dim = fit(b);
@@ -66,13 +92,19 @@
       grid = el('div.ng-grid');
       clueEls = { rows: [], cols: [] };
 
+      // 线索格必须**显式定位**。
+      // grid 的自动填充是按行优先，而列线索天然是"一列一列"排的——照 append 顺序摆会整体转置，
+      // 于是玩家看到"8 2"这种 10 行里根本装不下的线索，提示和标示也就对不上了。
       for (let c = 0; c < b.w; c++) {
         const list = b.clues.cols[c];
         clueEls.cols.push([]);
         for (let k = 0; k < ch; k++) {
           const idx = k - (ch - list.length);
           const v = idx >= 0 ? list[idx] : null;
-          const n = el('span.ng-clue', { text: v === null ? '' : String(v) });
+          // 整行/整列是空的（线索为 [0]）就不显示数字——数织的惯例，写个"0"反而扎眼
+          const n = el('span.ng-clue', { text: (v === null || v === 0) ? '' : String(v) });
+          n.style.gridColumn = String(c + 1);
+          n.style.gridRow = String(k + 1);
           if (v !== null) clueEls.cols[c].push({ node: n, k: k, value: v });
           cols.appendChild(n);
         }
@@ -83,16 +115,25 @@
         for (let k = 0; k < cw; k++) {
           const idx = k - (cw - list.length);
           const v = idx >= 0 ? list[idx] : null;
-          const n = el('span.ng-clue', { text: v === null ? '' : String(v) });
+          const n = el('span.ng-clue', { text: (v === null || v === 0) ? '' : String(v) });
+          n.style.gridColumn = String(k + 1);
+          n.style.gridRow = String(r + 1);
           if (v !== null) clueEls.rows[r].push({ node: n, k: k, value: v });
           rows.appendChild(n);
         }
       }
 
+      bw = b.w; bh = b.h;
       cellEls = [];
       for (let i = 0; i < b.w * b.h; i++) {
         const c = el('button.ng-cell', { dataset: { i: String(i) } });
-        c.addEventListener('pointerdown', (e) => { e.preventDefault(); if (onTap) onTap(i, e); });
+        c.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          // 右键 = 打叉，不进拖拽流程（右键拖拽没意义）
+          if (e.button === 2) { if (hooks.at) hooks.at(i, true); return; }
+          painting = true;
+          if (hooks.start) hooks.start(i);
+        });
         c.addEventListener('contextmenu', (e) => e.preventDefault());
         cellEls.push(c);
         grid.appendChild(c);
@@ -126,6 +167,7 @@
       for (let i = 0; i < cellEls.length; i++) {
         const v = b.cells[i];
         const c = cellEls[i];
+        c._v = v;                     // touch() 靠它判断该显示成什么样
         c.classList.toggle('is-fill', v === FILLED);
         c.classList.toggle('is-mark', v === MARKED);
         c.classList.toggle('is-wrong', !!(state && state.wrong && state.wrong.has(i)));
@@ -143,10 +185,20 @@
       }
     }
 
+    /** 只刷新一格的外观——拖拽时逐格整块重画会卡 */
+    function touch(i) {
+      const c = cellEls[i];
+      if (!c) return;
+      const v = c._v;
+      c.classList.toggle('is-fill', v === FILLED);
+      c.classList.toggle('is-mark', v === MARKED);
+    }
+
     return {
-      render: render, root: box, cellSize: () => cell,
+      render: render, root: box, cellSize: () => cell, cellAt: cellAt, touch: touch,
       resize: (b) => { if (b && cellEls.length) { fit(b); } },
-      onTap: (fn) => { onTap = fn; },
+      /** 拖拽批量填格：按下给 start，划过给 at，松手给 end */
+      onPaint: (h) => { hooks = h; },
     };
   }
 

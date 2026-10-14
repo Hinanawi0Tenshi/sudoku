@@ -1583,6 +1583,37 @@ async function main() {
              info: pieces + ' 块，曹操 ' + cao.w + '×' + cao.h + '，离出口 ' + d + ' 步' };
   })()`, 120000);
 
+  await step('华容道：出口框标在正确位置且永远盖在最上层', `(function(){
+    const K = SD.Klotski;
+    const b = K.app.getBoard();
+    const frame = document.querySelector('.k-exit-frame');
+    const fill = document.querySelector('.k-exit');
+    if (!frame || !fill) return { ok: false, info: '没有出口元素' };
+    const board = document.querySelector('.k-board');
+    const br = board.getBoundingClientRect();
+    const fr = frame.getBoundingClientRect();
+    // 出口是曹操要落到的 2×2（左上角 (3,1)）
+    const cell = br.width / 4;
+    const dx = Math.abs((fr.left - br.left) - cell);
+    const dy = Math.abs((fr.top - br.top) - 3 * cell);
+    // 框比"两格"略小是刻意的（每块棋子四周留了缝），所以这里放到 8px 容差
+    const sizeOk = Math.abs(fr.width - 2 * cell) < 8 && Math.abs(fr.height - 2 * cell) < 8;
+    // z-index 必须高过棋子，否则曹操一挪过来就把标记挡住了
+    const zFrame = Number(getComputedStyle(frame).zIndex);
+    const zPiece = Number(getComputedStyle(document.querySelector('.k-piece')).zIndex) || 0;
+    const onTop = zFrame > zPiece;
+    // 曹操在出口时框要变绿
+    const before = frame.className;
+    const p = b.pieces[0];
+    const saved = { r: p.r, c: p.c };
+    p.r = 3; p.c = 1; K.rebuild(b); K.app.render();
+    const opened = document.querySelector('.k-exit-frame').classList.contains('is-open');
+    p.r = saved.r; p.c = saved.c; K.rebuild(b); K.app.render();
+    return { ok: dx < 4 && dy < 4 && sizeOk && onTop && opened,
+             info: '偏移 ' + Math.round(dx) + ',' + Math.round(dy) + 'px，尺寸对=' + sizeOk
+               + '，z=' + zFrame + '（棋子 ' + zPiece + '），落位变色=' + opened };
+  })()`);
+
   await step('华容道：提示走完剩余距离正好减一', `(function(){
     const K = SD.Klotski;
     let bad = 0, checked = 0;
@@ -1654,6 +1685,67 @@ async function main() {
     const leaked = document.body.innerText.indexOf(b.name) >= 0;
     return { ok: cells === b.w * b.h && clues > 0 && !leaked,
              info: b.w + '×' + b.h + '，' + cells + ' 格，' + clues + ' 个线索位，图名泄露=' + leaked };
+  })()`);
+
+  // 回归：线索区曾经整体转置（grid 自动填充是行优先，而我是按列顺序 append 的），
+  // 玩家看到的是"8 2"这种 10 行里根本装不下的线索，提示和标示也就对不上了。
+  await step('数织：线索区和实际线索逐列逐格对齐', `(function(){
+    const N = SD.Nonogram;
+    const b = N.app.getBoard();
+    const cols = document.querySelector('.ng-cols');
+    const kids = cols.children;
+    const ch = Math.max.apply(null, b.clues.cols.map((c) => c.length).concat([1]));
+    let bad = 0, posBad = 0, detail = '';
+    for (let c = 0; c < b.w; c++) {
+      const list = b.clues.cols[c];
+      for (let k = 0; k < ch; k++) {
+        const idx = k - (ch - list.length);
+        // 空行/空列的线索是 [0]，界面上不显示数字（数织惯例）
+        const want = (idx >= 0 && list[idx] !== 0) ? String(list[idx]) : '';
+        const node = kids[c * ch + k];
+        if (!node) { bad++; continue; }
+        if (node.textContent !== want) { bad++; if (!detail) detail = '列' + (c+1) + ' 第' + (k+1) + '格 期望"' + want + '" 实际"' + node.textContent + '"'; }
+        if (node.style.gridColumn !== String(c + 1) || node.style.gridRow !== String(k + 1)) posBad++;
+      }
+    }
+    // 顺带验：没有任何一条线索"装不下"（段长之和 + 段间空格 > 行/列长度）
+    let impossible = 0;
+    for (const c of b.clues.cols) if (c.reduce((a, x) => a + x, 0) + (c.length - 1) > b.h) impossible++;
+    for (const c of b.clues.rows) if (c.reduce((a, x) => a + x, 0) + (c.length - 1) > b.w) impossible++;
+    return { ok: bad === 0 && posBad === 0 && impossible === 0,
+             info: '线索格不对 ' + bad + ' 处、位置不对 ' + posBad + ' 处、装不下的线索 ' + impossible + ' 条' + (detail ? '（' + detail + '）' : '') };
+  })()`);
+
+  await step('数织：拖拽可以批量填格', `(function(){
+    const N = SD.Nonogram;
+    const b = N.app.getBoard();
+    const grid = document.querySelector('.ng-grid');
+    const r = grid.getBoundingClientRect();
+    const size = r.width / b.w;
+    const at = (c, row) => ({ x: r.left + (c + 0.5) * size, y: r.top + (row + 0.5) * size });
+    // 先把第 4 行清空
+    for (let c = 0; c < b.w; c++) N.setCell(b, 3 * b.w + c, 0);
+    N.app.render();
+    const p0 = at(0, 3);
+    const first = document.querySelectorAll('.ng-cell')[3 * b.w];
+    first.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: p0.x, clientY: p0.y, button: 0 }));
+    for (let c = 1; c < b.w; c++) {
+      const p = at(c, 3);
+      document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: p.x, clientY: p.y }));
+    }
+    document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    let filled = 0;
+    for (let c = 0; c < b.w; c++) if (b.cells[3 * b.w + c] === 1) filled++;
+    // 再拖一次应该整行擦掉（第一格已经是实心，操作类型变成"清"）
+    first.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: p0.x, clientY: p0.y, button: 0 }));
+    for (let c = 1; c < b.w; c++) {
+      const p = at(c, 3);
+      document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: p.x, clientY: p.y }));
+    }
+    document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    let left = 0;
+    for (let c = 0; c < b.w; c++) if (b.cells[3 * b.w + c] === 1) left++;
+    return { ok: filled === b.w && left === 0, info: '划一次填了 ' + filled + '/' + b.w + ' 格，再划一次剩 ' + left + ' 格' };
   })()`);
 
   await step('数织：提示的结论必须和真解一致', `(function(){

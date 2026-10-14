@@ -122,7 +122,7 @@
       el('section.board-area', null, [
         el('div.k-wrap', null, el('div', { id: 'k-mount' })),
         tools,
-        el('p.k-tip', { text: '按住块往空位方向拖；也可以点选后按方向键' }),
+        el('p.k-tip', { text: '把曹操挪进金色框里就算赢 · 按住块往空位方向拖，也可以点选后按方向键' }),
       ]),
     ]));
 
