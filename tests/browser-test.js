@@ -2039,6 +2039,43 @@ await step('图片识别：四个角能拖动', `(async function(){
              info: '弹窗「' + title + '」，揭晓图 ' + art + ' 格，画册 ' + rev.length + ' 张（' + rev.map((x) => x.name).join('、') + '）' };
   })()`, 120000);
 
+  // 回归：一键笔记算出来的候选，本身就等于那些消除型解法的结论。
+  // 早先 isStepDone 靠"笔记里已经没有待删候选"判断"这步做过了"，
+  // 于是点完一键笔记，所有消除型提示全被判成已做过、列表清空，
+  // 面板显示"当前局面没有可用解法"（大师档空盘实测 4 条全被滤光），
+  // 而且还叫人"调高等级上限"——下拉框已经是最高档了。
+  // 注意：这条会重开一局，必须放在杀手小节最后，否则后面的用例会拿到另一道题。
+  await step('杀手数独：一键笔记之后提示面板仍要有内容', `(async function(){
+    document.getElementById('btn-home').click();
+    await new Promise(r => setTimeout(r, 250));
+    Array.from(document.querySelectorAll('.game-card'))
+      .find((c) => c.querySelector('.gc-name').textContent === '杀手数独').click();
+    await new Promise(r => setTimeout(r, 300));
+    document.querySelector('.home-item[data-go=play]').click();
+    await new Promise(r => setTimeout(r, 300));
+    const btns = document.querySelectorAll('#dialog-root .diff-btn');
+    if (!btns.length) return { ok: false, info: '没有难度对话框' };
+    btns[btns.length - 1].click();   // 最后一档 = 大师
+    for (let i = 0; i < 90; i++) {
+      await new Promise(r => setTimeout(r, 200));
+      if (document.documentElement.getAttribute('data-view') === 'game' && SD.Killer.app.getPuzzle()) break;
+    }
+    await new Promise(r => setTimeout(r, 300));
+    const filled = Array.from(SD.Killer.app.getGame().state.board.grid).filter(Boolean).length;
+    document.getElementById('btn-k-auto-notes').click();
+    await new Promise(r => setTimeout(r, 600));
+    const notes = Array.from(SD.Killer.app.getGame().state.board.notes).filter(Boolean).length;
+    document.getElementById('btn-k-hint').click();
+    await new Promise(r => setTimeout(r, 900));
+    const chips = document.querySelectorAll('#hint-output .mine-chip');
+    const body = (document.querySelector('#hint-output') || {}).textContent || '';
+    const maxed = body.indexOf('调高') >= 0;
+    return { ok: chips.length > 0 && !maxed,
+             info: '开局已填 ' + filled + ' 格、一键笔记后 ' + notes + ' 格有候选；'
+               + '提示面板 ' + chips.length + ' 条解法'
+               + (maxed ? '，且还在叫人"调高等级上限"' : '') };
+  })()`, 120000);
+
   /* ================= 导航 ================= */
 
   await step('从对局页能一路退回标题页换游戏', `(async function(){

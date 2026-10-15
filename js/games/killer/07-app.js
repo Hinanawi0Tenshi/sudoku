@@ -258,11 +258,25 @@
     if (hintIndex >= hintList.length) hintIndex = Math.max(0, hintList.length - 1);
   }
 
+  /**
+   * 没有可用解法时说什么。
+   * 上限已经是最高档的时候不能再说"调高上限"——那是在让人去做一件做不到的事
+   * （实测大师档空盘 + 一键笔记就是这个局面，提示还叫人调高，下拉框却已经到顶了）。
+   */
+  function noHintText(level) {
+    const max = Math.max.apply(null, SD.Sudoku.settings.HINT_LEVELS.map((h) => h.value));
+    if (level >= max) {
+      return '当前局面已经没有可用的推理了（等级上限已是最高档）。'
+        + '剩下的只能靠试错，或者点「自动求解」让它一次做完。';
+    }
+    return '当前局面没有可用解法了。试试把「等级上限」调高。';
+  }
+
   function renderHintPanel() {
     refreshHints();
     const out = clear($('#hint-output'));
     if (!hintList.length) {
-      out.appendChild(el('p', { text: '当前局面没有可用解法了。试试把「等级上限」调高。' }));
+      out.appendChild(el('p', { text: noHintText(Number($('#hint-level').value) || 5) }));
       return;
     }
     const strip = el('div.mine-steps');
@@ -319,7 +333,7 @@
     setHintOpen(true);
     if (!hintList.length) {
       renderHintPanel();
-      toast('当前局面没有可用解法了，试试调高「提示等级上限」', 'err');
+      toast(noHintText(Number($('#hint-level').value) || 5), 'err');
       return;
     }
     const entry = hintList[hintIndex];

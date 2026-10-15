@@ -35,6 +35,11 @@
       hints: 0,
       mistakes: 0,
       techniques: [],
+      // 玩家**真正执行过**的解法签名。注意不能靠"笔记里已经没有待删候选"来判断，
+      // 因为「一键笔记」算出来的候选本身就等于这些消除型解法的结论——
+      // 那样一开局所有消除型提示都会被判成"已做过"，列表清空，
+      // 面板显示"当前局面没有可用解法"（实测大师档空盘：4 条解法全被滤光）。
+      appliedSteps: new Set(),
       hint: null,
       wrongCells: new Set(),
       solveError: null,
@@ -259,6 +264,7 @@
         for (const p of entry.step.placements) st.board.propagateNotes(p.cell);
       }
       st.hints++;
+      st.appliedSteps.add(sigOf(entry.step));
       st.techniques.push(entry.step.id);
       commitHistory(before);
       checkWin();
@@ -284,13 +290,14 @@
      * 判据要求**所有**受影响的格子都有铅笔标记——没有标记说明玩家还没做过这一步，
      * 不能算「已完成」，否则刚开局（notes 全空）会把所有消除型解法一次滤光。
      */
+    const sigOf = (step) => step.id + '|'
+      + (step.placements || []).map((p) => p.cell + ':' + p.digit).join(',') + '|'
+      + (step.eliminations || []).map((e) => e.cell + ':' + e.digit).sort().join(',');
+
     function isStepDone(step) {
       if (!step || (step.placements && step.placements.length)) return false;
-      const elims = step.eliminations || [];
-      if (!elims.length) return false;
-      for (const e of elims) if (!st.board.notes[e.cell]) return false;
-      for (const e of elims) if (st.board.notes[e.cell] & B.bit(e.digit)) return false;
-      return true;
+      if (!(step.eliminations || []).length) return false;
+      return st.appliedSteps.has(sigOf(step));
     }
 
     function hint(level, apply) {
@@ -373,6 +380,7 @@
       st.hints = 0;
       st.mistakes = 0;
       st.techniques = [];
+      st.appliedSteps.clear();
       st.hint = null;
       st.wrongCells = new Set();
       st.won = false;
