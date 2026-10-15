@@ -666,7 +666,10 @@
       SD.Shell.openPage('杀手数独教程', (root) => K.learn.render(root));
     });
     $('#btn-k-auto-notes').addEventListener('click', () => {
-      const n = game.state.board.rebuildNotes();
+      // 必须走 game.rebuildNotes：它用的是带笼子约束的候选来源。
+      // 直接调 board.rebuildNotes() 会退回通用版（只扣行列宫），
+      // 笼子和是 5 的两格笼里就会挂着 7、8、9。
+      const n = game.rebuildNotes();
       render();
       scheduleSave();
       toast(n ? '已按当前盘面标记 ' + n + ' 格的候选数' : '当前盘面没有可标记的候选');
@@ -813,7 +816,9 @@
       walkthrough: (grid, level) => KH.walkthrough(puz, grid, level),
     },
     solve: (grid, limit) => KS.solve(puz, limit, null, grid),
-    baseCandidates: (grid) => SD.Validation.computeCandidates(grid),
+    // 必须用笼子版的：通用的只扣行列宫，笼子和是 5 的两格笼里还会挂着 7、8、9。
+    // 「一键笔记」和提示的「执行」都走这里，用错了整盘候选就是错的。
+    baseCandidates: (grid) => K.cages.computeCandidates(puz, grid),
   };
 
   const def = {

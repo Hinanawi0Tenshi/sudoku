@@ -2039,6 +2039,7 @@ await step('图片识别：四个角能拖动', `(async function(){
              info: '弹窗「' + title + '」，揭晓图 ' + art + ' 格，画册 ' + rev.length + ' 张（' + rev.map((x) => x.name).join('、') + '）' };
   })()`, 120000);
 
+
   // 回归：一键笔记算出来的候选，本身就等于那些消除型解法的结论。
   // 早先 isStepDone 靠"笔记里已经没有待删候选"判断"这步做过了"，
   // 于是点完一键笔记，所有消除型提示全被判成已做过、列表清空，
@@ -2070,9 +2071,28 @@ await step('图片识别：四个角能拖动', `(async function(){
     const chips = document.querySelectorAll('#hint-output .mine-chip');
     const body = (document.querySelector('#hint-output') || {}).textContent || '';
     const maxed = body.indexOf('调高') >= 0;
-    return { ok: chips.length > 0 && !maxed,
+    // 顺带验候选是按笼子算的：笼子和限制了笼内最大数字
+    //（k 格笼和为 s，最大只可能是 s−(k−1)，其余格最小是 1、2、3…）。
+    // 原先 baseCandidates 用的是通用版（只扣行列宫），笼子和是 5 的两格笼里还挂着 7、8、9。
+    const puz = SD.Killer.app.getPuzzle();
+    const notesArr = SD.Killer.app.getGame().state.board.notes;
+    let over = 0, ex = '';
+    for (const cg of puz.list) {
+      const maxDigit = cg.sum - (cg.cells.length - 1);
+      for (const i of cg.cells) {
+        for (const d of SD.Base.maskToDigits(notesArr[i])) {
+          if (d > maxDigit) {
+            over++;
+            if (!ex) ex = 'R' + (Math.floor(i / 9) + 1) + 'C' + (i % 9 + 1) + ' 有 ' + d + '（笼和 ' + cg.sum + '、' + cg.cells.length + ' 格）';
+            break;
+          }
+        }
+      }
+    }
+    return { ok: chips.length > 0 && !maxed && over === 0,
              info: '开局已填 ' + filled + ' 格、一键笔记后 ' + notes + ' 格有候选；'
-               + '提示面板 ' + chips.length + ' 条解法'
+               + '提示面板 ' + chips.length + ' 条解法；'
+               + '候选超出笼子可能性的 ' + over + ' 格' + (ex ? '（' + ex + '）' : '')
                + (maxed ? '，且还在叫人"调高等级上限"' : '') };
   })()`, 120000);
 

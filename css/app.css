@@ -1712,9 +1712,14 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .cell.cage-l::before { border-left-width: 2px; }
 .cell-cage {
   position: absolute;
-  /* 笼子虚线内缩了 2px（占 2~4px），数字得让开它，否则会被虚线划过去 */
-  top: 2px;
-  left: 4px;
+  top: 1px;
+  left: 2px;
+  /* 笼和要压在笼子虚线上，并在它压着的那两段开出一个缺口。
+     不给 z-index 的话虚线（z-index:2）会从数字中间划过去，读起来像数字被划掉了。 */
+  z-index: 3;
+  padding: 1px 3px 2px 2px;
+  background: var(--surface);
+  border-radius: 3px;
   /* 笼和必须够小：它占掉的高度直接是从候选数那里抢的 */
   font-size: clamp(7.5px, 1.35vw, 9.5px);
   font-weight: 650;

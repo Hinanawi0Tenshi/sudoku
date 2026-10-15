@@ -87,9 +87,13 @@
       return true;
     }
 
-    /** 用当前盘面里的数字重算全部铅笔标记（自动笔记） */
-    rebuildNotes() {
-      const cand = computeCandidates(this.grid);
+    /**
+     * 用当前盘面里的数字重算全部铅笔标记（自动笔记）。
+     * @param {Function} [candFn] 候选来源。杀手数独要传带笼子约束的那版——
+     *        默认的只扣行列宫，笼子和是 5 的两格笼里还会挂着 7、8、9。
+     */
+    rebuildNotes(candFn) {
+      const cand = (candFn || computeCandidates)(this.grid);
       for (let i = 0; i < B.CELL_COUNT; i++) {
         if (this.grid[i] || this.isLocked(i)) {
           this.notes[i] = 0;

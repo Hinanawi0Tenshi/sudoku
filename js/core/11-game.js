@@ -176,7 +176,7 @@
       if (D.settings().autoNotes) {
         const d = st.board.grid[i];
         if (d) st.board.propagateNotes(i);
-        else st.board.rebuildNotes();
+        else rebuildNotes();   // 走 deps.baseCandidates，别退回通用候选
       }
 
       checkWin();
@@ -293,6 +293,12 @@
     const sigOf = (step) => step.id + '|'
       + (step.placements || []).map((p) => p.cell + ':' + p.digit).join(',') + '|'
       + (step.eliminations || []).map((e) => e.cell + ':' + e.digit).sort().join(',');
+
+    /** 重算全部铅笔标记。候选来源走 deps.baseCandidates，各玩法可以换成自己的版本 */
+    function rebuildNotes() {
+      const fn = D.baseCandidates || SD.Validation.computeCandidates;
+      return st.board.rebuildNotes(fn);
+    }
 
     function isStepDone(step) {
       if (!step || (step.placements && step.placements.length)) return false;
@@ -413,6 +419,7 @@
       checkWin: checkWin,
       hint: hint,
       hintList: hintList,
+      rebuildNotes: rebuildNotes,
       applyStep: applyStep,
       clearHint: clearHint,
       autoSolve: autoSolve,
