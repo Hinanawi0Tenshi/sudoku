@@ -709,7 +709,10 @@ button.brand:hover { opacity: .72; }
 .cell.is-hint-value .cell-value { color: var(--warn); font-weight: 700; }
 
 .cell-notes {
-  position: absolute; inset: 0;
+  position: absolute;
+  /* 留出边距，候选数不贴着笼边框画。贴边看着又挤又乱，
+     而且 3x3 的格子紧贴边框时，最外圈的笔画会和虚线糊在一起。 */
+  inset: 9%;
   display: grid;
   grid-template: repeat(3, 1fr) / repeat(3, 1fr);
   pointer-events: none;
@@ -717,12 +720,14 @@ button.brand:hover { opacity: .72; }
 /* 有笼和的格子，候选数整体下移让位。
    不让的话笼和和候选"1"画在同一处——笼和"11"叠上候选"1"就是"111"，
    玩家根本分不出哪个是笼和。 */
-.cell.is-cage .cell-notes { top: 14px; }
+.cell.is-cage .cell-notes { top: calc(9% + 13px); }
 .cell-notes span {
   display: grid; place-items: center;
-  font-size: clamp(8px, 1.72vw, 11.5px);
+  /* 候选数是背景信息，不能和题面数字抢注意力：字号收小、字重放轻。
+     一格塞 9 个数字本来就密，字号每大一号，整盘就糊一层。 */
+  font-size: clamp(7.5px, 1.55vw, 10.5px);
   color: var(--note);
-  font-weight: 500;
+  font-weight: 450;
   line-height: 1;
 }
 .cell-notes span.gone { color: var(--danger); text-decoration: line-through; opacity: .75; }
@@ -1224,8 +1229,8 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
   .board-head { flex-direction: column; align-items: stretch; gap: 8px; }
   .board-flags { gap: 14px; }
   .cell-value { font-size: 24px; }
-  .cell-notes span { font-size: 10.5px; }
-  .cell.is-cage .cell-notes { top: 12px; }
+  .cell-notes span { font-size: 9.5px; }
+  .cell.is-cage .cell-notes { top: calc(9% + 11px); }
   .tab-body { padding: 13px; }
   .theme-grid { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); }
 }

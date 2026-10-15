@@ -13,7 +13,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 (async () => {
   const b = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
-    '--remote-debugging-port=' + PORT, '--user-data-dir=' + profile, '--window-size=900,1000', 'about:blank'], { stdio: 'ignore' });
+    '--remote-debugging-port=' + PORT, '--user-data-dir=' + profile,
+    '--window-size=' + (process.env.MOBILE ? '390,844' : '900,1000'), 'about:blank'], { stdio: 'ignore' });
   let t = null;
   for (let i = 0; i < 60 && !t; i++) {
     await sleep(400);
@@ -66,7 +67,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   })()`));
 
   const box = JSON.parse(await ev('(function(){var r=document.querySelector(".board").getBoundingClientRect();return JSON.stringify({x:Math.round(r.x)-4,y:Math.round(r.y)-4,width:Math.round(r.width)+8,height:Math.round(r.height)+8});})()'));
-  await shot('shot-killer-notes.png', box);
-  await shot('shot-killer-corner.png', { x: box.x, y: box.y, width: 170, height: 110, scale: 5 });
+  const tag = process.env.MOBILE ? '-mobile' : '';
+  await shot('shot-killer-notes' + tag + '.png', box);
+  await shot('shot-killer-corner' + tag + '.png', { x: box.x, y: box.y, width: 170, height: 110, scale: 5 });
+  console.log('格子边长: ' + await ev('(function(){var c=document.querySelector(".cell"); return c?Math.round(c.getBoundingClientRect().width)+"px":"?";})()'));
   ws.close(); b.kill(); process.exit(0);
 })().catch((e) => { console.error('崩溃', e.message); process.exit(1); });
