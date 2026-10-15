@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 serve.log
 bt.log
+push.log
 
 # 视觉回归截图是每次跑测试重新生成的产物，不进版本库
 tests/shot-*.png
