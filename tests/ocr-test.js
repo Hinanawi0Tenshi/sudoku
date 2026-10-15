@@ -156,7 +156,7 @@ const SCORE = `(async function () {
   await send('Runtime.enable');
   await send('Page.enable');
   // 接上 CDP 再导航。靠启动参数直接开目标页的话，页面在监听挂上之前
-  // 就开始加载，tesseract 那 20MB 常常还没到位就被判定为「未就绪」。
+  // 就开始加载，脚本还没跑完就被判定为「未就绪」。
   await send('Page.navigate', { url: 'http://127.0.0.1:8731/index.html' });
   // 浏览器把页面标签开出来，脚本未必跑完。必须等应用真正就绪，
   // 否则第一个场景会撞上 SD.Generator 还不存在的时刻。

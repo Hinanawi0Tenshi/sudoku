@@ -120,11 +120,11 @@ async function pool(items, limit, fn) {
 
   console.log('\n一致 ' + ok + '/' + rows.length + '，共校验 ' + kb(bytes));
 
-  // 单独点名 OCR 那套：它是整站最重、也最容易在部署时出问题的部分
-  const ocr = ['js/vendor/tesseract/worker.min.js',
-    'js/vendor/tesseract/tesseract-core-simd-lstm.wasm.js',
-    'js/vendor/tessdata/eng.traineddata.gz'];
-  console.log('\nOCR 资源（图片识别全靠它）：');
+  // 单独点名 OCR 那套。识别器现在是纯 JS（模板运行时用 Canvas 现画），
+  // 没有 20MB 的 wasm 资源要校验了——这里改点名它自己的两个文件，
+  // 它们一旦在部署时漏掉，图片识别就整个不可用。
+  const ocr = ['js/games/sudoku/07c-recognizer.js', 'js/games/sudoku/06-ocr-vision.js'];
+  console.log('\nOCR 模块（图片识别全靠它）：');
   for (const rel of ocr) {
     const r = rows.find((x) => x.rel === rel);
     if (!r) console.log('  ? ' + rel + '  本地缺失');
