@@ -527,6 +527,51 @@
       if (!extracted) throw new Error('透视校正失败，请调整四个角后重试');
       state.extracted = extracted;
 
+      // 主路径：移植来的识别器一次跑完整盘。
+      // 它自带自适应二值化、剥离贴边网格线、模板+孔洞分类、数独约束纠错，
+      // 全都比"逐格喂通用 OCR"对路，而且不需要那 17MB 的 wasm 包。
+      let solvedByRecognizer = false;
+      try {
+        const R = new SD.Sudoku.Recognizer();
+        // 防御性裁紧：校正图正常应该正好是棋盘，但 refineGrid 报的范围更可靠
+        const gr = state.extracted.grid;
+        const side = Math.round(gr.cellW * 9);
+        const wc = document.createElement('canvas');
+        wc.width = side;
+        wc.height = side;
+        wc.getContext('2d').drawImage(state.extracted.warped, gr.x0, gr.y0, side, side, 0, 0, side, side);
+        const wctx = wc.getContext('2d', { willReadFrequently: true });
+        const res = R.recognizeWarpedBoard(wctx.getImageData(0, 0, side, side));
+        let n = 0;
+        for (let i = 0; i < 81; i++) {
+          const cell = res.cells[i];
+          state.digits[i] = cell.digit || 0;
+          state.confidences[i] = cell.digit ? Math.round(cell.confidence * 100) : -1;
+          if (cell.digit) n++;
+        }
+        state.engine = 'recognizer';
+        // 先把结果定下来，再做界面更新：界面更新要写 ui.result，
+        // 而 recognize() 也可能被脚本直接调用（那时面板根本没挂），
+        // 写不进去不能算识别失败、更不能因此退回 OCR。
+        solvedByRecognizer = true;
+        try {
+          const clash0 = checkConflicts();
+          renderResult();
+          const low0 = state.confidences.filter((c) => c >= 0 && c < LOW_CONF).length;
+          setStatus('识别完成：' + n + ' 格有数字'
+            + (clash0 ? '，其中 ' + clash0 + ' 格与同行/同列/同宫重复（标红），多半认错了，必须先改' : '')
+            + (low0 && !clash0 ? '，其中 ' + low0 + ' 格置信度偏低（标黄），建议逐格确认'
+              : (low0 ? '' : '，置信度良好')),
+            clash0 || low0 ? 'warn' : 'ok');
+          log('识别器：命中 ' + n + ' / 81 格（自适应二值化 + 剥离网格线 + 孔洞特征 + 约束纠错）');
+        } catch (uiErr) { /* 面板没挂，界面更新跳过即可 */ }
+      } catch (e) {
+        state.engine = 'tesseract';
+        state.recognizerError = e.message;
+        log('识别器失败，退回逐格 OCR：' + e.message);
+      }
+      if (solvedByRecognizer) return;
+
       const worker = await ensureWorker();
       let perCell = null;
       let pencilSet = new Set();
