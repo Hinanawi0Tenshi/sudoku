@@ -2096,6 +2096,28 @@ await step('图片识别：四个角能拖动', `(async function(){
                + (maxed ? '，且还在叫人"调高等级上限"' : '') };
   })()`, 120000);
 
+  // 回归：反复执行提示不能卡住。
+  // 消除型解法不改盘面，引擎会把同一条反复列出来。上一版按"执行过"就永久拉黑，
+  // 结果简单档走 7 步、大师档走 4 步就卡死（当时 available 明明还有 4 条），
+  // 面板显示"没有可用的推理"。判据必须是"执行过 **且** 效果已落到笔记里"。
+  await step('杀手数独：反复执行提示不会卡住', `(async function(){
+    const g = SD.Killer.app.getGame();
+    let steps = 0;
+    const filled0 = Array.from(g.state.board.grid).filter(Boolean).length;
+    for (let k = 0; k < 60; k++) {
+      const list = g.hintList(5);
+      if (!list.length) break;
+      g.applyStep(list[0], true);
+      steps++;
+    }
+    const rest = g.hintList(5);
+    const filled = Array.from(g.state.board.grid).filter(Boolean).length;
+    const done = SD.Validation.isComplete(g.state.board.grid);
+    return { ok: rest.length > 0 || done,
+             info: '执行 ' + steps + ' 步，填了 ' + filled0 + ' → ' + filled + ' 格；'
+               + '之后还有 ' + rest.length + ' 条解法' + (done ? '（已解完）' : '') };
+  })()`, 120000);
+
   /* ================= 导航 ================= */
 
   await step('从对局页能一路退回标题页换游戏', `(async function(){

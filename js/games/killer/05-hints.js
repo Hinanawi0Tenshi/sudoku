@@ -117,6 +117,15 @@
   function available(puz, grid, opts) {
     const o = opts || {};
     const state = K.techniques.makeState(puz, grid);
+    // 把玩家的铅笔标记并进候选。笔记是玩家已经推出来的结论——不并进来的话，
+    // 引擎每次从盘面重算，会把已经删掉的候选重新推出来，同一条消除型解法反复列出，
+    // 面板按"做过"过滤之后列表就空了（实测简单档走 7 步、大师档走 4 步就卡住）。
+    if (o.notes) {
+      for (let i = 0; i < B.CELL_COUNT; i++) {
+        if (state.grid[i]) continue;
+        state.cand[i] &= o.notes[i] || 0;
+      }
+    }
     const steps = K.techniques.findAll(state, o.maxLevel || 5);
     return steps.map((step) => ({ step: step, explain: explainStep(step, puz) }));
   }

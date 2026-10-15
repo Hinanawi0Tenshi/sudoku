@@ -277,7 +277,7 @@
      * 提示面板要一次列出全部，让用户自己挑下一步走哪条路。
      */
     function hintList(level) {
-      const all = D.hints.available(st.board.grid, { maxLevel: level || 5 });
+      const all = D.hints.available(st.board.grid, { maxLevel: level || 5, notes: st.board.notes });
       // 已经落地的纯消除型解法不再重复列出。提示是按盘面算的，而消除不改盘面，
       // 所以同一条解法会永远排在第一——玩家点完「执行」面板一个字都不变，像卡住了。
       return all.filter((entry) => !isStepDone(entry.step));
@@ -300,10 +300,24 @@
       return st.board.rebuildNotes(fn);
     }
 
+    /**
+     * 这一步是不是"做完了"。
+     *
+     * 两个条件必须**同时**成立，缺一个都会出问题：
+     *   · 只看笔记 →「一键笔记」算出来的候选本身就等于这些消除型解法的结论，
+     *     一开局所有消除型提示都会被判成已做过，列表清空；
+     *   · 只看"执行过" → 消除型解法不改盘面，引擎会把同一条反复列出来，
+     *     一旦拉黑就再也不显示，同样卡死（实测简单档走 7 步、大师档走 4 步就卡住，
+     *     当时 available 明明还有 4 条）。
+     * 所以：执行过 **且** 待删候选确实已经不在笔记里，才算做完。
+     */
     function isStepDone(step) {
       if (!step || (step.placements && step.placements.length)) return false;
-      if (!(step.eliminations || []).length) return false;
-      return st.appliedSteps.has(sigOf(step));
+      const elims = step.eliminations || [];
+      if (!elims.length) return false;
+      if (!st.appliedSteps.has(sigOf(step))) return false;
+      for (const e of elims) if (st.board.notes[e.cell] & B.bit(e.digit)) return false;
+      return true;
     }
 
     function hint(level, apply) {
