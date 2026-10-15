@@ -64,7 +64,12 @@
       { x: size, y: size },
       { x: 0, y: size },
     ];
-    const H = homography(quad, dst);
+    // 方向不能反：循环里拿 H 去映射的是**输出坐标**，要的是 dst→quad。
+    // 写成 homography(quad, dst) 会得到逆向缩放——源 594、quad 594、输出 720 时，
+    // 棋盘在输出里只占 488（缩小了而不是放大）。
+    // extractCells 里的 refineGrid 会重新找网格线，所以逐格路径一直没暴露；
+    // 但任何按 9 等分切格的代码都会整体错位。
+    const H = homography(dst, quad);
     if (!H) return null;
 
     const sctx = srcCanvas.getContext('2d', { willReadFrequently: true });

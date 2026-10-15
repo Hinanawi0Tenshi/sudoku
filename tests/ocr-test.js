@@ -198,8 +198,11 @@ const SCORE = `(async function () {
     results[mode] = r;
   }
   // 干净合成图是识别准确率的红线：透视校正、切格、二值化、逐格 OCR 全在里面。
-  // 照片场景只做观察——JPEG 重压缩与透视重采样叠加后网格复检仍有残差，
-  // 准确率取决于印刷质量，不适合作为必须达标的断言。
+  // 照片场景也升成门禁。之前它一直只有 25%，我以为是"JPEG + 透视重采样"的锅，
+  // 结果真凶是 warpQuad 的缩放方向写反了——修完直接 97%。
+  // 教训：先量清楚瓶颈在哪一环，再谈换算法。
+  const ph = results.photo;
+  const passPhoto = !!ph && ph.right >= ph.total * 0.9 && ph.extra === 0;
   const c = results.clean;
   const n = results.notes;
   const passClean = !!c && c.right === c.total && c.wrong === 0 && c.extra === 0;
@@ -210,7 +213,9 @@ const SCORE = `(async function () {
   // 靠的是"墨色"这道正交闸门（尺寸闸门单独扛不住——候选数铺开后包围盒比线索字还大）。
   const passNotes = !!n && n.right === n.total && n.wrong === 0 && n.extra === 0;
   console.log('  ' + (passNotes ? '✓ 笔记场景：题面全对、铅笔小字 0 泄漏' : '✗ 笔记场景未达标'));
-  const pass = passClean && passNotes;
+  console.log('  ' + (passPhoto ? '✓ 照片场景：正确率 ' + Math.round(ph.right / ph.total * 100) + '%、0 多出'
+    : '✗ 照片场景未达标（' + (ph ? ph.right + '/' + ph.total : '无') + '）'));
+  const pass = passClean && passNotes && passPhoto;
   ws.close(); b.kill();
   try { require('fs').rmSync(profile, { recursive: true, force: true }); } catch (e) {}
   process.exit(pass ? 0 : 1);
