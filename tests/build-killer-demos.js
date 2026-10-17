@@ -33,29 +33,61 @@ const K = SD.Killer;
 const KT = K.techniques;
 const KG = K.generator;
 
-/** 一局里依次经过的技巧：一局的解法本来就会用好几种技巧 */
-function scan(gen) {
+/** 这一步的结论必须和真解一致：填的数不能填错，删的候选不能删掉真解数字 */
+function stepOk(step, sol) {
+  for (const p of step.placements || []) if (sol[p.cell] !== p.digit) return false;
+  for (const e of step.eliminations || []) if (sol[e.cell] === e.digit) return false;
+  return true;
+}
+
+/**
+ * 一局里扫出尽可能多的技巧演示局面。
+ *
+ * 不能只跟着正常解题顺序走——那是「当前最该走的一步」，稀有技巧往往排在后面，
+ * 一局下来根本轮不到它，结果就是找不到演示。所以每到一个局面，主动问一遍
+ * 「这条技巧现在能不能用」，能就截下来。这样演示只要求「真的能用」，
+ * 不要求「非用不可」，反而更适合讲解。
+ */
+function scan(gen, wanted) {
   const puz = gen.puzzle;
+  const sol = gen.solution;
   const found = {};
   const g = new Uint8Array(81);
   const state = KT.makeState(puz, g);
   const cand = state.cand;
+
+  const probe = (id) => {
+    if (found[id]) return;
+    const t = KT.byId[id];
+    if (!t || t.expensive) return;
+    const step = t.find(state);
+    if (!step) return;
+    if (!stepOk(step, sol)) {
+      console.error('✗ ' + id + ' 在 ' + gen.difficultyName + ' 局面上给出了和真解冲突的结论');
+      process.exit(1);
+    }
+    found[id] = {
+      puz: puz, sol: sol, grid: g.slice(), cand: Array.from(cand),
+      step: SD.Techniques.decorate(t, step), difficulty: gen.difficultyName,
+    };
+  };
+
   let guard = 0;
   while (!SD.Validation.isComplete(g) && guard++ < 300) {
+    for (const id of wanted) probe(id);
     const step = KT.findStepFrom(state, { maxLevel: 4 });
     if (!step) break;
-    if (!found[step.id]) found[step.id] = { puz: puz, sol: gen.solution, grid: g.slice(), cand: Array.from(cand), step: step, difficulty: gen.difficultyName };
     SD.Techniques.commit(g, cand, step);
   }
+
   // 笼内试数只在「别的都推不动」时才出场，推到底之后再单独问它一次
   if (!found['cage-trial']) {
     const t = KT.byId['cage-trial'];
     const trial = t.find(state);
-    if (trial) {
+    if (trial && stepOk(trial, sol)) {
       found['cage-trial'] = {
-        puz: puz, sol: gen.solution, grid: g.slice(), cand: Array.from(cand),
-        step: SD.Techniques.decorate(t, trial),
-        difficulty: gen.difficultyName,
+        puz: puz, sol: sol, grid: g.slice(), cand: Array.from(cand),
+        step: SD.Techniques.decorate(t, trial), difficulty: gen.difficultyName,
       };
     }
   }
@@ -64,10 +96,11 @@ function scan(gen) {
 
 const WANT = KT.LIST.map((t) => t.id);
 const demos = {};
-for (let s = 0; s < 40 && Object.keys(demos).length < WANT.length; s++) {
-  const id = ['medium', 'hard', 'expert'][s % 3];
-  const gen = KG.generateSync(id, 'demo-' + s);
-  const found = scan(gen);
+const DIFFS = ['medium', 'hard', 'expert', 'expert', 'hard'];
+for (let s = 0; s < 200 && Object.keys(demos).length < WANT.length; s++) {
+  const gen = KG.generateSync(DIFFS[s % DIFFS.length], 'demo-' + s);
+  const wanted = WANT.filter((id) => !demos[id]);
+  const found = scan(gen, wanted);
   for (const k of Object.keys(found)) if (!demos[k]) demos[k] = found[k];
 }
 

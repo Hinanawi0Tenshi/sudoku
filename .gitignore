@@ -1,7 +1,7 @@
 # 本地静态服务器不需要跟踪
 __pycache__/
 *.pyc
-serve.log
+serve*.log
 bt.log
 push.log
 

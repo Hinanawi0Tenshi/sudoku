@@ -1439,12 +1439,12 @@ await step('图片识别：四个角能拖动', `(async function(){
              info: '一格笼子 R' + (Math.floor(i/9)+1) + 'C' + (i%9+1) + ' 和=' + single.sum + '，盘面填了 ' + g.state.board.grid[i] };
   })()`);
 
-  await step('教程：六条笼子技巧都能展开出演示盘面', `(async function(){
+  await step('教程：十二条笼子技巧都能展开出演示盘面', `(async function(){
     const t0 = Date.now();
     SD.Shell.openPage('杀手数独教程', (root) => SD.Killer.learn.render(root));
     await new Promise(r => setTimeout(r, 400));
     const heads = Array.from(document.querySelectorAll('.mine-learn-head'));
-    if (heads.length !== 6) return { ok: false, info: '技巧卡片 ' + heads.length + ' 张，应为 6' };
+    if (heads.length !== 12) return { ok: false, info: '技巧卡片 ' + heads.length + ' 张，应为 12' };
     const missing = [];
     for (const h of heads) {
       h.click();
@@ -1456,7 +1456,7 @@ await step('图片识别：四个角能拖动', `(async function(){
     }
     const boards = document.querySelectorAll('.killer-demo .board').length;
     return { ok: missing.length === 0,
-             info: boards + '/6 种有演示盘面，全部展开耗时 ' + (Date.now() - t0) + 'ms'
+             info: boards + '/12 种有演示盘面，全部展开耗时 ' + (Date.now() - t0) + 'ms'
                + (missing.length ? '，缺：' + missing.join('、') : '') };
   })()`, 120000);
 

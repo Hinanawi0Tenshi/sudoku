@@ -156,6 +156,399 @@
     },
   });
 
+  /* ==================== L2/L3 · 组合互斥 · 少解笼子组合 ==================== */
+
+  const ODD_MASK = (function () { let m = 0; for (let d = 1; d <= 9; d += 2) m |= bit(d); return m; })();
+  const EVEN_MASK = (function () { let m = 0; for (let d = 2; d <= 9; d += 2) m |= bit(d); return m; })();
+
+  /**
+   * 笼子剩余空格的「候选组合」：数字既不和笼内已填的重复，也得真的能落进某个空格。
+   * 这一步只是粗筛（每个数字至少有一个落点），细筛交给 matchable。
+   */
+  function cageCombos(state, c, cap) {
+    const { grid, cand, puz } = state;
+    const r = C.remain(puz, grid, c);
+    if (r.empty < 2) return null;
+    const all = C.COMBOS[r.empty] && C.COMBOS[r.empty][r.left];
+    if (!all || !all.length || all.length > cap) return null;
+    const cells = puz.list[c].cells.filter((i) => !grid[i]);
+    const out = [];
+    for (const combo of all) {
+      if (combo & r.used) continue;
+      let ok = true;
+      for (let t = 0; t < cells.length; t++) if (!(cand[cells[t]] & combo)) { ok = false; break; }
+      if (ok) out.push(combo);
+    }
+    if (!out.length) return null;
+    return { cells: cells, combos: out, used: r.used, left: r.left };
+  }
+
+  /**
+   * 组合能不能真的摆进这些格子：数字和格子做二分匹配。
+   * 只判「每个数字都有落点」是不够的——两个数字抢同一格时会漏判。
+   * forced 用来固定某一格只能取某个数字，配合逐格试探算出「这一格可能拿到哪些数字」。
+   */
+  function matchable(cells, combo, cand, forced) {
+    const digits = B.maskToDigits(combo);
+    const n = cells.length;
+    if (digits.length !== n) return false;
+    const owner = new Int8Array(n).fill(-1);
+    const visit = (ci, seen) => {
+      const allow = forced && forced[ci] !== undefined ? forced[ci] : cand[cells[ci]];
+      for (let di = 0; di < n; di++) {
+        if (seen[di] || !(allow & bit(digits[di]))) continue;
+        seen[di] = 1;
+        if (owner[di] < 0 || visit(owner[di], seen)) { owner[di] = ci; return true; }
+      }
+      return false;
+    };
+    for (let ci = 0; ci < n; ci++) if (!visit(ci, new Int8Array(n))) return false;
+    return true;
+  }
+
+  /** 逐格算出「在可行的摆法里，这一格可能拿到哪些数字」 */
+  function cellReach(cells, combos, cand) {
+    const n = cells.length;
+    const reach = new Int32Array(n);
+    for (const combo of combos) {
+      if (!matchable(cells, combo, cand)) continue;
+      for (let t = 0; t < n; t++) {
+        for (const d of B.maskToDigits(cand[cells[t]] & combo)) {
+          if (reach[t] & bit(d)) continue;
+          const forced = {};
+          forced[t] = bit(d);
+          if (matchable(cells, combo, cand, forced)) reach[t] |= bit(d);
+        }
+      }
+    }
+    return reach;
+  }
+
+  register({
+    id: 'cage-mutex',
+    name: '组合互斥',
+    alias: ['Cage Mutex', '组合与候选互斥'],
+    level: 2,
+    order: 3,
+    tagline: '组合本身合法，不代表摆得进这些格子。',
+    principle:
+      '「3 格和为 8」的组合里可能有 {1,2,5}，但如果这三格里有两格的候选里都没有 5，这个组合就是废的。'
+      + '把每个组合挨个往格子上摆一遍（数字互不相同，所以这是一次匹配），摆不进去的组合整个划掉；'
+      + '剩下还摆得进去的组合里，从没出现在某格上的数字，就可以从那一格划掉。',
+    howto: ['列出笼子的所有组合；', '逐个检查这个组合能不能摆进笼内的空格（每格都得有个它能取的数字）；', '把摆不进去的组合剔除；', '某格在所有剩下的组合里都拿不到的数字，划掉。'],
+    pitfalls: '只看「每个数字都有落点」还不够——两个数字抢同一格时会误判。要确认整套组合能被分配下去。',
+    find(state) {
+      const { cand, puz } = state;
+      for (let c = 0; c < puz.list.length; c++) {
+        const p = cageCombos(state, c, 40);
+        if (!p) continue;
+        let union = 0;
+        for (const x of p.combos) union |= x;
+        const elims = [];
+        for (const i of p.cells) {
+          for (const d of B.maskToDigits(cand[i] & ~union)) elims.push({ cell: i, digit: d });
+        }
+        if (!elims.length) {
+          // 粗筛筛不出东西时，再用匹配把「数字抢同一格」的组合剔掉。
+          // 匹配是 O(n^3)，所以只在笼子小、组合少的时候做，否则每次刷新提示都要白付这份钱。
+          if (p.cells.length > 5 || p.combos.length > 16) continue;
+          const reach = cellReach(p.cells, p.combos, cand);
+          for (let t = 0; t < p.cells.length; t++) {
+            for (const d of B.maskToDigits(cand[p.cells[t]] & ~reach[t])) elims.push({ cell: p.cells[t], digit: d });
+          }
+        }
+        if (!elims.length) continue;
+        return baseStep('cage-mutex', {
+          focusCell: p.cells[0],
+          cells: puz.list[c].cells.slice(),
+          eliminations: elims,
+          detail: { cage: c, sum: puz.list[c].sum, combos: p.combos.length },
+        });
+      }
+      return null;
+    },
+  });
+
+  register({
+    id: 'cage-few',
+    name: '少解笼子组合',
+    alias: ['Few Combinations', '组合少到能定数'],
+    level: 3,
+    order: 3,
+    tagline: '组合只剩两三种时，笼内哪一格放哪个数字往往已经定了。',
+    principle:
+      '笼子的「和」和「格数」一起把组合限得很死时，剩下的组合常常只有两三种。'
+      + '把这几种组合挨个往笼内的空格上分一遍，如果某一格在所有分得进去的摆法里都只拿到同一个数字，'
+      + '那它就已经是定数了——不需要再等别的技巧。',
+    howto: ['列出笼子剩余的组合；', '把每个组合按「每格取一个互不相同的数字」分到笼内的空格上；', '某一格在所有可行摆法里都只有同一个数字，就把它填上。'],
+    pitfalls: '只对「组合少」的笼子做（≤3 种）。组合一多，几乎不会出现定数，白花计算。',
+    find(state) {
+      const { cand, puz } = state;
+      for (let c = 0; c < puz.list.length; c++) {
+        const p = cageCombos(state, c, 12);
+        if (!p) continue;
+        const alive = [];
+        for (const combo of p.combos) if (matchable(p.cells, combo, cand)) alive.push(combo);
+        if (!alive.length || alive.length > 3) continue;
+        const reach = cellReach(p.cells, alive, cand);
+        for (let t = 0; t < p.cells.length; t++) {
+          const ds = B.maskToDigits(reach[t]);
+          if (ds.length !== 1) continue;
+          return baseStep('cage-few', {
+            focusCell: p.cells[t],
+            focusDigit: ds[0],
+            cells: puz.list[c].cells.slice(),
+            placements: [{ cell: p.cells[t], digit: ds[0] }],
+            detail: { cage: c, sum: puz.list[c].sum, combos: alive.length, empty: p.cells.length },
+          });
+        }
+      }
+      return null;
+    },
+  });
+
+  /* ==================== L3 · 笼子分割 / 宫线笼减 ==================== */
+
+  /**
+   * 笼子按单元边界切开后，探进某个单元的那一段和是多少？
+   *
+   * 这段本身不是笼子，和也不直接知道——但它只能是「笼子剩余组合」里的若干个数字，
+   * 于是它的和落在一个区间里。用它去夹该单元里剩下的格子。
+   *
+   * exact=false：单元里正好还剩一格没被这个笼子盖住，用区间夹这一格。
+   * exact=true ：单元被「笼内这一段 + 已填格」完全盖满，这一段的和是定值，
+   *              于是它等价于一个和已知的虚拟笼子，可以按组合排除。
+   */
+  function unitPartFind(state, id, exact) {
+    const { grid, cand, puz } = state;
+    for (let c = 0; c < puz.list.length; c++) {
+      const cells = puz.list[c].cells;
+      const r = C.remain(puz, grid, c);
+      if (!r.empty) continue;
+      const combos = C.COMBOS[r.empty] && C.COMBOS[r.empty][r.left];
+      if (!combos || !combos.length || combos.length > 80) continue;
+      for (let u = 0; u < B.UNITS.length; u++) {
+        const unit = B.UNITS[u];
+        const inside = [];
+        const outside = [];
+        for (const i of cells) (unit.indexOf(i) >= 0 ? inside : outside).push(i);
+        // 完全落在单元内的归 45 法则；完全在外面的和这个单元无关
+        if (!inside.length || !outside.length) continue;
+        const insideSet = new Set(inside);
+        let fixed = 0;
+        const emptyInside = [];
+        for (const i of inside) { if (grid[i]) fixed += grid[i]; else emptyInside.push(i); }
+        if (!emptyInside.length) continue;
+        let restCell = -1;
+        let restCount = 0;
+        for (const i of unit) {
+          if (insideSet.has(i)) continue;
+          if (grid[i]) { fixed += grid[i]; continue; }
+          restCount++;
+          restCell = i;
+        }
+        const k = emptyInside.length;
+
+        if (exact) {
+          if (restCount !== 0) continue;
+          const need = 45 - fixed;
+          if (need < 1 || need > 45) continue;
+          if (k === 1) {
+            const i = emptyInside[0];
+            if (need < 1 || need > 9 || !(cand[i] & bit(need))) continue;
+            return baseStep(id, {
+              focusCell: i, focusDigit: need, cells: cells.slice(), units: [u],
+              placements: [{ cell: i, digit: need }],
+              detail: { cage: c, sum: puz.list[c].sum, unit: u, need: need, count: k },
+            });
+          }
+          const mask = C.possible(k, need);
+          if (!mask) continue;
+          const elims = [];
+          for (const i of emptyInside) {
+            for (const d of B.maskToDigits(cand[i] & ~mask)) elims.push({ cell: i, digit: d });
+          }
+          if (!elims.length) continue;
+          return baseStep(id, {
+            cells: cells.slice(), units: [u], eliminations: elims,
+            detail: { cage: c, sum: puz.list[c].sum, unit: u, need: need, count: k, mask: mask },
+          });
+        }
+
+        if (restCount !== 1) continue;
+        // 探进单元的这一段最少取 k 个最小的、最多取 k 个最大的
+        let lo = 99;
+        let hi = -1;
+        for (const combo of combos) {
+          if (combo & r.used) continue;
+          const ds = B.maskToDigits(combo);
+          if (ds.length < k) continue;
+          let small = 0;
+          let big = 0;
+          for (let t = 0; t < k; t++) { small += ds[t]; big += ds[ds.length - 1 - t]; }
+          if (small < lo) lo = small;
+          if (big > hi) hi = big;
+        }
+        if (hi < 0) continue;
+        const vLo = Math.max(1, 45 - fixed - hi);
+        const vHi = Math.min(9, 45 - fixed - lo);
+        if (vLo > vHi) continue;
+        const elims = [];
+        for (const d of B.maskToDigits(cand[restCell])) {
+          if (d < vLo || d > vHi) elims.push({ cell: restCell, digit: d });
+        }
+        if (!elims.length) continue;
+        return baseStep(id, {
+          focusCell: restCell, cells: cells.slice(), units: [u], eliminations: elims,
+          detail: { cage: c, sum: puz.list[c].sum, unit: u, lo: vLo, hi: vHi },
+        });
+      }
+    }
+    return null;
+  }
+
+  register({
+    id: 'cage-split',
+    name: '笼子分割',
+    alias: ['Cage Split', '跨单元笼子'],
+    level: 3,
+    order: 4,
+    tagline: '笼子探进单元的那一段，和虽然没定，但有个范围。',
+    principle:
+      '笼子跨出单元时，落在单元里的那几格不能单独求和——它们只是笼子组合的一部分。'
+      + '但组合只有那么几种，每种里「最小的几格之和」到「最大的几格之和」是能算出来的，'
+      + '于是这一段的和一个区间。单元总和是 45，剩下的那一格就被夹在这个区间里。',
+    howto: ['找一个探进某单元、又探出去的笼子；', '列出它的所有组合；', '算出探进单元的那几格的和的最小值与最大值；', '45 减去这段和、再减去单元里已填的数字，就是剩下那一格的范围。'],
+    pitfalls: '只对「单元里正好还剩一格没被这个笼子盖住」成立。剩两格以上时只能算出两格之和的范围，夹不出单格。',
+    find(state) { return unitPartFind(state, 'cage-split', false); },
+  });
+
+  register({
+    id: 'cage-line',
+    name: '宫线笼减',
+    alias: ['Cage Line Reduction', '笼内定和'],
+    level: 3,
+    order: 5,
+    tagline: '笼子探出单元的那一头填满了，探进来的一段和就定了。',
+    principle:
+      '一条线（或一个宫）被「某个笼子探进来的那几格」和「已经填好的格子」正好盖满时，'
+      + '45 减去已填的数字，就是笼内那一段的和——它是定值。'
+      + '于是这一段等价于一个和已知的虚拟笼子，可以按组合把候选划掉。',
+    howto: ['挑一条线或一个宫；', '找一个探进来又探出去的笼子；', '确认单元里除了这个笼子的那几格，剩下的格子都已经填了；', '45 减去已填数字就是笼内这段的和，按组合排除。'],
+    pitfalls: '必须「盖满」——单元里还有空格时等式不成立，那段的和是未知的。',
+    find(state) { return unitPartFind(state, 'cage-line', true); },
+  });
+
+  /* ==================== L4 · 笼子比较 / 奇偶规则 ==================== */
+
+  register({
+    id: 'cage-compare',
+    name: '笼子比较',
+    alias: ['Cage Comparison', '两笼对照'],
+    level: 4,
+    order: 1,
+    tagline: '一个笼子这么摆，会让旁边那个笼子彻底没得摆。',
+    principle:
+      '两个笼子如果整个落在同一个单元里，它们互相「看得见」——数字不能重复。'
+      + '这时把笼 A 的每个组合拿去和笼 B 的所有组合比一遍：'
+      + '如果 A 取某个组合之后，B 的每一种组合都和它撞数字，那 B 就没得摆了，说明 A 这个组合不可能。',
+    howto: ['找两个整个落在同一行（列 / 宫）里的笼子；', '列出两个笼子各自剩余的组合；', '拿 A 的每个组合去比 B 的所有组合；', '让 B 无路可走的那些组合作废，只出现在作废组合里的数字划掉。'],
+    pitfalls: '两个笼子必须整个落在同一个单元里。有一个探出单元，它们的数字就不再互相排斥，比不了。',
+    find(state) {
+      const { cand, puz } = state;
+      const cache = [];
+      for (let c = 0; c < puz.list.length; c++) cache[c] = cageCombos(state, c, 12);
+      for (let u = 0; u < B.UNITS.length; u++) {
+        const unit = B.UNITS[u];
+        const unitSet = new Set(unit);
+        const inner = [];
+        for (let c = 0; c < puz.list.length; c++) {
+          const p = cache[c];
+          if (!p) continue;
+          let inside = true;
+          for (const i of puz.list[c].cells) if (!unitSet.has(i)) { inside = false; break; }
+          if (inside) inner.push({ cage: c, p: p });
+        }
+        if (inner.length < 2) continue;
+        for (let a = 0; a < inner.length; a++) {
+          const A = inner[a];
+          for (let b = 0; b < inner.length; b++) {
+            if (b === a) continue;
+            const other = inner[b].p.combos;
+            const keep = [];
+            for (const x of A.p.combos) {
+              let ok = false;
+              for (const y of other) if (!(x & y)) { ok = true; break; }
+              if (ok) keep.push(x);
+            }
+            if (!keep.length || keep.length === A.p.combos.length) continue;
+            const reach = new Int32Array(A.p.cells.length);
+            for (const x of keep) for (let t = 0; t < A.p.cells.length; t++) reach[t] |= x;
+            const elims = [];
+            for (let t = 0; t < A.p.cells.length; t++) {
+              for (const d of B.maskToDigits(cand[A.p.cells[t]] & ~reach[t])) elims.push({ cell: A.p.cells[t], digit: d });
+            }
+            if (!elims.length) continue;
+            return baseStep('cage-compare', {
+              focusCell: A.p.cells[0],
+              cells: puz.list[A.cage].cells.slice(),
+              units: [u],
+              eliminations: elims,
+              detail: { cage: A.cage, other: inner[b].cage, unit: u, kept: keep.length, total: A.p.combos.length },
+            });
+          }
+        }
+      }
+      return null;
+    },
+  });
+
+  register({
+    id: 'cage-parity',
+    name: '奇偶规则',
+    alias: ['Parity', '奇偶夹逼'],
+    level: 4,
+    order: 2,
+    tagline: '两格的和是奇数，这两格就一奇一偶。',
+    principle:
+      '两个数字相加，和的奇偶由两个数字的奇偶决定：一奇一偶得奇数，同奇或同偶得偶数。'
+      + '所以笼子剩两格时，剩余和一旦定了，两格的奇偶关系也就定了。'
+      + '如果其中一格的候选全是奇数（或全是偶数），另一格的奇偶就被逼死，可以删掉一半候选。',
+    howto: ['找只剩两格没填的笼子；', '看剩下的和是奇数还是偶数；', '如果其中一格的候选只剩一种奇偶，另一格就必须是另一种（或同一种）；', '把另一格里不符合的候选划掉。'],
+    pitfalls: '只对两格成立。三格以上时「和是奇数」只能推出「奇数的个数是奇数个」，推不出某格的奇偶。',
+    find(state) {
+      const { grid, cand, puz } = state;
+      for (let c = 0; c < puz.list.length; c++) {
+        const r = C.remain(puz, grid, c);
+        if (r.empty !== 2) continue;
+        const cells = puz.list[c].cells;
+        const empty = cells.filter((i) => !grid[i]);
+        if (empty.length !== 2) continue;
+        const need = r.left;
+        if (need < 3 || need > 17) continue;
+        const opposite = need % 2 === 1;
+        const [a, b] = empty;
+        const elims = [];
+        const force = (from, to) => {
+          const oddOnly = !(cand[from] & EVEN_MASK);
+          const evenOnly = !(cand[from] & ODD_MASK);
+          if (oddOnly === evenOnly) return; // 两种奇偶都还有，逼不出东西
+          const toOdd = oddOnly ? !opposite : opposite;
+          const bad = toOdd ? EVEN_MASK : ODD_MASK;
+          for (const d of B.maskToDigits(cand[to] & bad)) elims.push({ cell: to, digit: d });
+        };
+        force(a, b);
+        force(b, a);
+        if (!elims.length) continue;
+        return baseStep('cage-parity', {
+          focusCell: a, cells: cells.slice(), eliminations: elims,
+          detail: { cage: c, sum: puz.list[c].sum, need: need, opposite: opposite },
+        });
+      }
+      return null;
+    },
+  });
+
   /* ==================== L3 · 45 法则 ==================== */
 
   /**
@@ -512,6 +905,14 @@
     'locked-claiming': 4,
     'naked-pair': 6,
     'hidden-pair': 7,
+    // 新加的六条：权重只影响分数，不影响星级（星级看 level）。
+    // 组合互斥最便宜，宫线笼减是 45 法则的变体，笼子比较最绕。
+    'cage-mutex': 3,
+    'cage-few': 6,
+    'cage-split': 8,
+    'cage-line': 9,
+    'cage-compare': 11,
+    'cage-parity': 8,
   };
   const STAR_BREAK = [130, 280, 470, 800];
 

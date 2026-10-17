@@ -277,7 +277,7 @@ section('6. 教程的演示局面（离线生成的静态数据）');
   const demos = SD.Killer.demos || {};
   const ids = KT.LIST.map((t) => t.id);
   const missing = ids.filter((id) => !demos[id]);
-  ok('六条笼子技巧都有演示局面', missing.length === 0, missing.join(', '));
+  ok('十二条笼子技巧都有演示局面', missing.length === 0, missing.join(', '));
 
   // 演示局面是离线算好写死的数据。它必须真的成立：技巧在这个局面上能用，
   // 而且它给出的结论和真解一致。生成脚本或引擎改动导致数据过期时，这里会立刻失败。

@@ -71,6 +71,65 @@
       out.push('本轮删掉：' + list(s.eliminations.map((e) => rc(e.cell) + '≠' + e.digit)) + '。');
       return out;
     },
+    'cage-mutex'(s, puz) {
+      const d = s.detail;
+      const out = [];
+      out.push('笼子 ' + cellsOf(puz.list[d.cage].cells) + ' 的和是 ' + d.sum + '，现在还剩 ' + d.combos + ' 种组合摆得进去。');
+      out.push('组合本身合法，不等于摆得进这些格子：把每个组合挨个往笼内的空格上分一遍，每一格都得有一个它能取的数字。');
+      out.push('分不进去的组合整条作废。作废之后，某些格子上再也拿不到的数字就能划掉。');
+      out.push('本轮划掉：' + list(s.eliminations.map((e) => rc(e.cell) + ' 的 ' + e.digit)) + '。');
+      return out;
+    },
+    'cage-few'(s, puz) {
+      const d = s.detail;
+      const out = [];
+      out.push('笼子 ' + cellsOf(puz.list[d.cage].cells) + ' 的和是 ' + d.sum + '，还空着 ' + d.empty + ' 格。');
+      out.push('把「' + d.empty + ' 个互不相同的数字加起来等于 ' + d.sum + '」的组合摆到这几格上，能摆进去的只剩 ' + d.combos + ' 种。');
+      out.push('组合少到这个份上，就逐个摆一遍看每格能拿到什么。');
+      out.push(rc(s.focusCell) + ' 在所有可行摆法里都只能是 ' + s.focusDigit + '——直接定数。');
+      return out;
+    },
+    'cage-split'(s, puz) {
+      const d = s.detail;
+      const out = [];
+      out.push('笼子 ' + cellsOf(puz.list[d.cage].cells) + ' 跨出了' + unitName(d.unit) + '，探进来的那几格不能单独求和。');
+      out.push('但组合只有那么几种：每种里「最小的几格之和」到「最大的几格之和」都算得出来，所以这一段的和落在一个区间里。');
+      out.push('这个单元里除了这几格，只剩 ' + rc(s.focusCell) + ' 一格空着。45 减去这段和、再减去已填的数字，它的范围就是 ' + d.lo + '~' + d.hi + '。');
+      out.push('本轮划掉：' + list(s.eliminations.map((e) => rc(e.cell) + ' 的 ' + e.digit)) + '。');
+      return out;
+    },
+    'cage-line'(s, puz) {
+      const d = s.detail;
+      const out = [];
+      out.push('看' + unitName(d.unit) + '：笼子 ' + cellsOf(puz.list[d.cage].cells) + ' 探进来一段，其余格子都已经填好了。');
+      out.push('这一行（列 / 宫）里 9 个数字各一次，总和 45。45 减去已填的数字，就是笼内这一段的定值和：' + d.need + '。');
+      out.push('这一段于是等价于一个「和为 ' + d.need + '」的虚拟笼子，可以按组合排除候选。');
+      out.push(s.placements.length
+        ? '只剩一格，直接填 ' + s.focusDigit + '。'
+        : '本轮划掉：' + list(s.eliminations.map((e) => rc(e.cell) + ' 的 ' + e.digit)) + '。');
+      return out;
+    },
+    'cage-compare'(s, puz) {
+      const d = s.detail;
+      const out = [];
+      out.push('笼子 ' + cellsOf(puz.list[d.cage].cells) + ' 和笼子 ' + cellsOf(puz.list[d.other].cells) + ' 都整个落在' + unitName(d.unit) + '里。');
+      out.push('同一单元里 9 个数字各用一次，两个笼子占的格子又不重叠，所以它们的数字集合必须完全不撞。');
+      out.push('拿笼子 A 的 ' + d.total + ' 种组合逐个去比：只要和笼子 B 的某种组合不撞数字就还留着，比下来只剩 ' + d.kept + ' 种。');
+      out.push('被砍掉的组合用不到的数字，可以从笼内格子上划掉。');
+      out.push('本轮划掉：' + list(s.eliminations.map((e) => rc(e.cell) + ' 的 ' + e.digit)) + '。');
+      return out;
+    },
+    'cage-parity'(s, puz) {
+      const d = s.detail;
+      const out = [];
+      out.push('笼子 ' + cellsOf(puz.list[d.cage].cells) + ' 只剩两格没填，还差 ' + d.need + '。');
+      out.push(d.opposite
+        ? '两个数字相加，和是奇数，说明这两格必然一奇一偶。'
+        : '两个数字相加，和是偶数，说明这两格奇偶相同——要么都奇，要么都偶。');
+      out.push('其中一格的候选只剩下一种奇偶，另一格就被逼死了。');
+      out.push('本轮划掉：' + list(s.eliminations.map((e) => rc(e.cell) + ' 的 ' + e.digit)) + '。');
+      return out;
+    },
   };
 
   const CONCLUSION = {
@@ -84,6 +143,18 @@
       ? '把 ' + rc(s.focusCell) + ' 填成 ' + s.focusDigit + '。'
       : '删除 ' + list(s.eliminations.map((e) => rc(e.cell) + ' 的 ' + e.digit)) + '。'),
     'cage-trial': (s) => '删除 ' + list(s.eliminations.map((e) => rc(e.cell) + ' 的 ' + e.digit)) + '。',
+    'cage-mutex': (s) => '删除 ' + list(s.eliminations.map((e) => rc(e.cell) + ' 的 ' + e.digit)) + '。',
+    'cage-few': (s) => (s.placements.length
+      ? '把 ' + rc(s.focusCell) + ' 填成 ' + s.focusDigit + '。'
+      : '删除 ' + list(s.eliminations.map((e) => rc(e.cell) + ' 的 ' + e.digit)) + '。'),
+    'cage-split': (s) => '删除 ' + list(s.eliminations.map((e) => rc(e.cell) + ' 的 ' + e.digit)) + '。',
+    'cage-line': (s) => (s.placements.length
+      ? '把 ' + rc(s.focusCell) + ' 填成 ' + s.focusDigit + '。'
+      : '删除 ' + list(s.eliminations.map((e) => rc(e.cell) + ' 的 ' + e.digit)) + '。'),
+    'cage-compare': (s) => (s.placements.length
+      ? '把 ' + rc(s.focusCell) + ' 填成 ' + s.focusDigit + '。'
+      : '删除 ' + list(s.eliminations.map((e) => rc(e.cell) + ' 的 ' + e.digit)) + '。'),
+    'cage-parity': (s) => '删除 ' + list(s.eliminations.map((e) => rc(e.cell) + ' 的 ' + e.digit)) + '。',
   };
 
   const KILLER_IDS = Object.keys(DERIVE);
