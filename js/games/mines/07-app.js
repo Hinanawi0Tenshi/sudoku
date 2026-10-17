@@ -494,7 +494,7 @@
       const d = Store.dailyStats();
       const pts = SD.Points.total();
       root.appendChild(el('p.lead', {
-        text: '通关点数 ' + pts + '（三款游戏通用）。扫雷这部分的成绩只存在本机。',
+        text: '通关点数 ' + pts + '（全部游戏通用）。扫雷这部分的成绩只存在本机。',
       }));
 
       const card = el('div.card', null, el('h3', { text: '各档成绩' }));
@@ -533,7 +533,7 @@
           },
         }),
       ]));
-      danger.appendChild(el('p', { text: '三款游戏的数据各存各的，这里清不掉别的游戏。' }));
+      danger.appendChild(el('p', { text: '所有游戏的数据各存各的，这里清不掉别的游戏。' }));
       root.appendChild(danger);
     });
   }

@@ -67,9 +67,9 @@
   function renderLibrary(root) {
     const wallet = SD.Sudoku.store.state().wallet || {};
     const owned = wallet.owned || {};
-    // 点数是三款游戏共用的账本，数独自己也往里贡献，所以余额从 SD.Points 读
+    // 点数是所有游戏共用的账本，数独自己也往里贡献，所以余额从 SD.Points 读
     root.appendChild(el('p.lead', {
-      text: '通关点数 ' + SD.Points.total() + '（三款游戏通用），在图鉴里抽卡。抽取与兑换还在做，先看看卡面。',
+      text: '通关点数 ' + SD.Points.total() + '（全部游戏通用），在图鉴里抽卡。抽取与兑换还在做，先看看卡面。',
     }));
     const lib = el('div.gacha-lib');
     for (const card of LIST) {

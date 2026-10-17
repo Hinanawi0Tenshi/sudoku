@@ -47,7 +47,7 @@
       ]));
     }
     themeCard.appendChild(grid);
-    themeCard.appendChild(el('p', { text: '主题对整个合集生效，三款游戏共用。' }));
+    themeCard.appendChild(el('p', { text: '主题对整个合集生效，所有游戏共用。' }));
     root.appendChild(themeCard);
 
     /* 各游戏自己的设置。没实装的游戏不显示，免得点开一片空。 */
@@ -82,8 +82,8 @@
         el('button.btn.btn-warn', {
           text: '清除本机全部数据',
           onclick: () => {
-            // 二次确认：这一下会把三款游戏的战绩、存档、题库、点数和图鉴全清掉，不可撤销
-            if (!confirm('会清掉三款游戏的全部战绩、存档、题库、点数和图鉴，且无法恢复。确定吗？')) return;
+            // 二次确认：这一下会把所有游戏的战绩、存档、题库、点数和图鉴全清掉，不可撤销
+            if (!confirm('会清掉所有游戏的全部战绩、存档、题库、点数和图鉴，且无法恢复。确定吗？')) return;
             if (!confirm('真的确定？建议先去「我的」页导出备份。')) return;
             SD.Storage.wipe();
             location.reload();

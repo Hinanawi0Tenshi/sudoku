@@ -76,7 +76,7 @@
     root.appendChild(homeStatsNode);
   }
 
-  /** 启动页的入口。设置和关于在标题页上，三款游戏共用一份，这里不再各放一个 */
+  /** 启动页的入口。设置和关于在标题页上，所有游戏共用一份，这里不再各放一个 */
   function handleHome(go) {
     if (go === 'play') { openNewGameDialog(); return; }
     if (go === 'bank') { SD.Shell.openPage('题库', openBankPage); return; }

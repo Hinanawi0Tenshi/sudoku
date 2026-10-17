@@ -523,7 +523,7 @@
       const st = Store.stats();
       const d = Store.dailyStats();
       root.appendChild(el('p.lead', {
-        text: '通关点数 ' + SD.Points.total() + '（三款游戏通用）。杀手数独这部分的成绩只存在本机。',
+        text: '通关点数 ' + SD.Points.total() + '（全部游戏通用）。杀手数独这部分的成绩只存在本机。',
       }));
 
       const card = el('div.card', null, el('h3', { text: '各档成绩' }));
@@ -568,7 +568,7 @@
           },
         }),
       ]));
-      danger.appendChild(el('p', { text: '三款游戏的数据各存各的，这里清不掉别的游戏。' }));
+      danger.appendChild(el('p', { text: '所有游戏的数据各存各的，这里清不掉别的游戏。' }));
       root.appendChild(danger);
     });
   }

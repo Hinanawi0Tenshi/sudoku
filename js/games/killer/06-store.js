@@ -92,7 +92,7 @@
     save();
   }
 
-  /** 每日挑战战绩。日期键用 SD.Util.dayKey，三款游戏格式统一。 */
+  /** 每日挑战战绩。日期键用 SD.Util.dayKey，所有游戏格式统一。 */
   function dailyStats() {
     const d = state.stats.daily || {};
     const today = U.dayKey();
