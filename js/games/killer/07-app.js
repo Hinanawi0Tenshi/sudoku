@@ -354,7 +354,7 @@
   function newGame(difficultyId, seed) {
     const my = session;
     const cfg = KG.DIFFICULTY[difficultyId] || KG.DIFFICULTY.medium;
-    SD.Shell.overlay('正在出题…', '切笼子并校验唯一解，通常一两秒。');
+    SD.Shell.overlay('正在出题…', '切笼子并校验唯一解，通常一两秒；困难档会久一点。');
     // 出题是同步的、会阻塞主线程，先让遮罩画出来再算，否则看着像卡死
     setTimeout(() => {
       if (my !== session) return;
@@ -423,8 +423,8 @@
     easy: '小笼子为主，几乎全靠笼内定数',
     medium: '开始需要笼内组合',
     hard: '会用到 45 法则',
-    expert: '笼子更大，组合与 45 法则交织',
-    master: '常规技巧不够，必须试数',
+    expert: '必须动用高级技巧，偶尔得试数',
+    master: '高级技巧也推不完，必须试数',
   };
 
   function openNewGameDialog() {

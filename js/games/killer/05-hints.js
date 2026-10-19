@@ -193,8 +193,11 @@
     // 面板按"做过"过滤之后列表就空了（实测简单档走 7 步、大师档走 4 步就卡住）。
     if (o.notes) {
       for (let i = 0; i < B.CELL_COUNT; i++) {
-        if (state.grid[i]) continue;
-        state.cand[i] &= o.notes[i] || 0;
+        if (state.grid[i] || !o.notes[i]) continue;
+        // 只收窄「玩家确实做过笔记」的格子。笔记为空是「还没做笔记」，不是「候选被推没了」——
+        // 一刀切地 &= 0 会把开局（笔记全空）判成无解：实测困难 / 大师档开局点提示 0 条解法，
+        // 简单档也只剩 1 条。
+        state.cand[i] &= o.notes[i];
       }
     }
     const steps = K.techniques.findAll(state, o.maxLevel || 5);

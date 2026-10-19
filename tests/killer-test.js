@@ -24,6 +24,8 @@ for (const f of [
   'js/games/killer/02-solver.js',
   'js/games/killer/03-techniques.js',
   'js/games/killer/04-generator.js',
+  'js/core/06-hints.js',          // 提示文案是拼字符串的，SD.Hints.explainStep 是它的兜底
+  'js/games/killer/05-hints.js',
 ]) {
   vm.runInThisContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), { filename: f });
 }
@@ -212,18 +214,25 @@ section('4. 出题器');
 
 {
   const seenLevels = {};
+  const means = [];
   let allUnique = true;
-  let allHit = true;
   for (const id of G.DIFFICULTY_ORDER) {
+    const stars = [];
     for (let s = 0; s < 6; s++) {
       const gen = G.generateSync(id, 'gen-' + id + '-' + s);
-      if (!gen.hitTarget) allHit = false;
       if (KS.solve(gen.puzzle, 2).count !== 1) allUnique = false;
       seenLevels[gen.rating.level] = (seenLevels[gen.rating.level] || 0) + 1;
+      stars.push(gen.rating.star);
     }
+    means.push({ name: G.DIFFICULTY[id].name, mean: stars.reduce((a, b) => a + b, 0) / stars.length });
   }
   ok('每一道都唯一解', allUnique);
-  ok('每一道都切到了目标难度', allHit);
+  // 档位的契约是「实测难度落在区间内」，预算内凑不齐就退而求其次、把实测星级如实报出去——
+  // 所以不能再断言「每一道都达标」：困难档本来就只有一半凑得齐 4 星。改断言阶梯单调，
+  // 这才是玩家真正感受到的东西（也是「五档一模一样」那个 bug 的判据）。
+  let mono = true;
+  for (let i = 1; i < means.length; i++) if (means[i].mean < means[i - 1].mean - 0.2) mono = false;
+  ok('五档实测星级单调递增', mono, means.map((m) => m.name + ' ' + m.mean.toFixed(1)).join(' / '));
   ok('难度确实拉开了层次', Object.keys(seenLevels).length >= 3, JSON.stringify(seenLevels));
 }
 
@@ -311,6 +320,41 @@ section('6. 教程的演示局面（离线生成的静态数据）');
   }
   ok('每个演示局面都能触发对应技巧，且结论与真解一致', !bad, bad);
   console.log('  ' + fired + '/' + ids.length + ' 条技巧的演示局面验证通过');
+}
+
+/* ---------------- 7. 提示文案 ---------------- */
+
+section('7. 提示文案');
+
+{
+  // 文案是从 step.detail 里拼字符串拼出来的，字段名写错不会抛异常，只会漏出 "undefined"。
+  // 实际踩过：笼内必含的文案取 d.left，而该技巧的 detail 只带了 sum，
+  // 面板上就成了「笼子 R5C3、R6C3 还差 undefined，组合只有那么几种」。
+  let bad = '';
+  let lines = 0;
+  for (const id of G.DIFFICULTY_ORDER) {
+    const gen = G.generateSync(id, 'text-' + id);
+    for (const w of SD.Killer.hints.walkthrough(gen.puzzle, new Uint8Array(81), 5)) {
+      const blob = typeof w.explain === 'string' ? w.explain : JSON.stringify(w.explain);
+      lines++;
+      if (!bad && /undefined|NaN/.test(blob)) bad = w.step.id + '：' + blob.slice(0, 140);
+    }
+  }
+  ok('提示文案里没有 undefined / NaN', !bad, bad || (lines + ' 步文案'));
+}
+
+{
+  // 笔记全空 = 玩家还没做过笔记，不是「候选已经被推没了」。
+  // 曾经把空笔记直接交进候选里，开局（不点一键笔记）点提示在困难 / 大师档直接 0 条解法。
+  let bad = '';
+  for (const id of G.DIFFICULTY_ORDER) {
+    const gen = G.generateSync(id, 'empty-' + id);
+    const grid = new Uint8Array(81);
+    const zero = SD.Killer.hints.available(gen.puzzle, grid, { maxLevel: 5, notes: new Int32Array(81) }).length;
+    const plain = SD.Killer.hints.available(gen.puzzle, grid, { maxLevel: 5 }).length;
+    if (!bad && zero !== plain) bad = id + '：空笔记 ' + zero + ' 条，不传笔记 ' + plain + ' 条';
+  }
+  ok('开局（笔记全空）的提示条数与不带笔记时一致', !bad, bad);
 }
 
 /* ---------------- 汇总 ---------------- */

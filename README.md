@@ -21,7 +21,7 @@
 
 两种方式都能用：出题、提示、技巧教学、统计、导入导出、主题切换，以及图片识别——
 识别器是纯 JS 实现的，不依赖 Web Worker、不加载任何外部文件，所以 `file://` 下照样能跑。
-冒烟测试在 http 和 `file://` 两种协议下都是 102/102。
+冒烟测试在 http 和 `file://` 两种协议下都是 104/104。
 
 ---
 
@@ -575,7 +575,7 @@ accent, ready, mount, unmount, points, about, settings })`，然后在 `index.ht
 # 1. 核心引擎单元测试（125 项断言，纯 Node）
 node tests/run-core-tests.js
 
-# 2. 浏览器端冒烟测试（102 项，用 CDP 驱动真实页面）
+# 2. 浏览器端冒烟测试（104 项，用 CDP 驱动真实页面）
 node tests/browser-test.js
 
 # 3. 网格自动定位测试（7 个场景，纯 Node，无需浏览器）
@@ -587,7 +587,7 @@ node tests/ocr-test.js
 # 5. 扫雷核心与求解器（30 项，纯 Node）
 node tests/mines-test.js
 
-# 6. 杀手数独核心与技巧引擎（27 项，纯 Node）
+# 6. 杀手数独核心与技巧引擎（28 项，纯 Node）
 node tests/killer-test.js
 
 # 7. 数字华容道核心、A* 与提示（39 项，纯 Node）
@@ -605,17 +605,20 @@ node tests/nonogram-test.js
 # 11. 出题质量（终盘重复 / 难度下限 / 种子确定性 / 每日挑战确定性，纯 Node）
 node tests/verify-gen.js
 
-# 12. 视觉回归截图
+# 12. 杀手数独五档难度的分布审计（各 10 局打直方图，纯 Node）
+node tests/difficulty-audit.js 10 --assert
+
+# 13. 视觉回归截图
 node tests/shot-arch.js
 
-# 13. 重新生成杀手数独的教程演示局面（改了出题逻辑才需要跑，纯 Node）
+# 14. 重新生成杀手数独的教程演示局面（改了出题逻辑才需要跑，纯 Node）
 node tests/build-killer-demos.js
 
-# 14. 线上部署校验（发布完跑一遍）
+# 15. 线上部署校验（发布完跑一遍）
 node tests/verify-live.js
 ```
 
-2、4、12 需要 Edge/Chrome 和一个跑着的本地服务（双击 `启动数独.cmd` 即可）。
+2、4、13 需要 Edge/Chrome 和一个跑着的本地服务（双击 `启动数独.cmd` 即可）。
 其余是纯 Node，直接跑。
 
 核心引擎测试里最重要的是一条**性质测试**：从随机局面上把每一种技巧跑一遍，
@@ -724,14 +727,15 @@ wasm 和语言包，还要额外写 worker。现在换成自己的一套：动�
 ```powershell
 node tests/run-core-tests.js   # 数独核心逻辑 125 项断言，纯 Node
 node tests/mines-test.js       # 扫雷核心与求解器 30 项，纯 Node
-node tests/killer-test.js      # 杀手数独核心与技巧引擎 27 项，纯 Node
+node tests/killer-test.js      # 杀手数独核心与技巧引擎 28 项，纯 Node
 node tests/slide-test.js       # 数字华容道模型与求解器 39 项，纯 Node
 node tests/g2048-test.js       # 2048 核心与期望最大化求解器 31 项，纯 Node
 node tests/klotski-test.js     # 华容道模型、全状态求解器与出题 31 项，纯 Node
 node tests/nonogram-test.js    # 数织核心、行求解器、图库与提示 41 项，纯 Node
 node tests/detect-test.js      # 网格自动定位的 7 个场景
 node tests/verify-gen.js       # 出题质量，纯 Node
-node tests/browser-test.js     # 真实浏览器冒烟 102 项，需要本地服务在线
+node tests/difficulty-audit.js # 杀手数独五档难度分布，纯 Node，加 --assert 可当回归测试
+node tests/browser-test.js     # 真实浏览器冒烟 104 项，需要本地服务在线
 node tests/ocr-test.js         # 图片识别端到端
 node tests/shot-arch.js        # 关键页面截图
 node tests/verify-live.js      # 线上部署校验，纯 Node，发布后跑

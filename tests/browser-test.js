@@ -16,8 +16,12 @@ const profile = path.join(os.tmpdir(), 'sudoku-smoke-' + Date.now());
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
+  // 关掉后台定时器节流：整轮跑下来要五六分钟，一旦被判成后台页，页面里的 setTimeout
+  // 会被拉长到一分钟一次，凡是"在页面里 await 定时器"的用例都会假装挂死（实测 120s 求值超时）。
   const browser = spawn(EDGE, [
     '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+    '--disable-background-timer-throttling', '--disable-renderer-backgrounding',
+    '--disable-backgrounding-occluded-windows',
     '--remote-debugging-port=' + PORT, '--user-data-dir=' + profile,
     '--window-size=1400,1000', 'about:blank',
   ], { stdio: 'ignore' });
@@ -81,6 +85,20 @@ async function main() {
     ]);
     if (r.exceptionDetails) throw new Error('求值失败: ' + (r.exceptionDetails.exception ? r.exceptionDetails.exception.description : r.exceptionDetails.text));
     return r.result.value;
+  };
+
+  /**
+   * 在 Node 侧轮询页面状态。页面里的定时器会被浏览器节流，Node 的不会——
+   * 需要「等某个条件成立」时一律走这里，不要写成页面里的 await setTimeout 循环。
+   */
+  const waitFor = async (expr, timeoutMs, label) => {
+    const t0 = Date.now();
+    const limit = timeoutMs || 10000;
+    for (;;) {
+      try { if (await evaluate('!!(' + expr + ')')) return Date.now() - t0; } catch (e) { /* 页面可能正在切换视图 */ }
+      if (Date.now() - t0 > limit) throw new Error('等待「' + (label || expr) + '」超时 ' + limit + 'ms');
+      await sleep(120);
+    }
   };
 
   await send('Runtime.enable');
@@ -2046,28 +2064,30 @@ await step('图片识别：四个角能拖动', `(async function(){
   // 面板显示"当前局面没有可用解法"（大师档空盘实测 4 条全被滤光），
   // 而且还叫人"调高等级上限"——下拉框已经是最高档了。
   // 注意：这条会重开一局，必须放在杀手小节最后，否则后面的用例会拿到另一道题。
-  await step('杀手数独：一键笔记之后提示面板仍要有内容', `(async function(){
-    document.getElementById('btn-home').click();
-    await new Promise(r => setTimeout(r, 250));
+  await step('杀手数独：回到首页并开新局', `(function(){
+    const home = document.getElementById('btn-home');
+    if (home) home.click();
     Array.from(document.querySelectorAll('.game-card'))
       .find((c) => c.querySelector('.gc-name').textContent === '杀手数独').click();
-    await new Promise(r => setTimeout(r, 300));
     document.querySelector('.home-item[data-go=play]').click();
-    await new Promise(r => setTimeout(r, 300));
+    return { ok: true, info: '已回到杀手数独首页并点「开始」' };
+  })()`);
+
+  // 等对话框、等出题一律在 Node 侧轮询：页面里的定时器会被浏览器节流，
+  // 写成页面内的 await setTimeout 循环，在跑了几分钟的长会话里会假死（实测 120s 求值超时）。
+  await waitFor("document.querySelectorAll('#dialog-root .diff-btn').length", 8000, '难度对话框');
+  await step('杀手数独：选最后一档（大师）', `(function(){
     const btns = document.querySelectorAll('#dialog-root .diff-btn');
-    if (!btns.length) return { ok: false, info: '没有难度对话框' };
-    btns[btns.length - 1].click();   // 最后一档 = 大师
-    for (let i = 0; i < 90; i++) {
-      await new Promise(r => setTimeout(r, 200));
-      if (document.documentElement.getAttribute('data-view') === 'game' && SD.Killer.app.getPuzzle()) break;
-    }
-    await new Promise(r => setTimeout(r, 300));
+    btns[btns.length - 1].click();
+    return { ok: true, info: '共 ' + btns.length + ' 档，选了最后一档' };
+  })()`);
+  await waitFor('SD.Killer.app.getPuzzle()', 30000, '大师档出题');
+
+  await step('杀手数独：一键笔记之后提示面板仍要有内容', `(function(){
     const filled = Array.from(SD.Killer.app.getGame().state.board.grid).filter(Boolean).length;
     document.getElementById('btn-k-auto-notes').click();
-    await new Promise(r => setTimeout(r, 600));
     const notes = Array.from(SD.Killer.app.getGame().state.board.notes).filter(Boolean).length;
     document.getElementById('btn-k-hint').click();
-    await new Promise(r => setTimeout(r, 900));
     const chips = document.querySelectorAll('#hint-output .mine-chip');
     const body = (document.querySelector('#hint-output') || {}).textContent || '';
     const maxed = body.indexOf('调高') >= 0;
@@ -2094,7 +2114,7 @@ await step('图片识别：四个角能拖动', `(async function(){
                + '提示面板 ' + chips.length + ' 条解法；'
                + '候选超出笼子可能性的 ' + over + ' 格' + (ex ? '（' + ex + '）' : '')
                + (maxed ? '，且还在叫人"调高等级上限"' : '') };
-  })()`, 120000);
+  })()`);
 
   // 回归：反复执行提示不能卡住。
   // 消除型解法不改盘面，引擎会把同一条反复列出来。上一版按"执行过"就永久拉黑，
@@ -2120,16 +2140,14 @@ await step('图片识别：四个角能拖动', `(async function(){
 
   /* ================= 导航 ================= */
 
-  await step('从对局页能一路退回标题页换游戏', `(async function(){
+  // 全程同步：视图切换本来就是同步的，页面里等定时器只会在长会话里被节流拖死。
+  await step('从对局页能一路退回标题页换游戏', `(function(){
     SD.Shell.showView('game');
-    await new Promise(r => setTimeout(r, 120));
     document.getElementById('btn-home-back').click();
-    await new Promise(r => setTimeout(r, 180));
     const atHome = document.documentElement.getAttribute('data-view');
     const exit = document.getElementById('btn-game-exit');
     if (!exit) return { ok: false, info: '游戏首页没有「换个游戏」按钮' };
     exit.click();
-    await new Promise(r => setTimeout(r, 250));
     const atTitle = document.documentElement.getAttribute('data-view');
     const cards = document.querySelectorAll('.game-card').length;
     const clickable = Array.from(document.querySelectorAll('.game-card')).filter((c) => !c.classList.contains('is-soon')).length;

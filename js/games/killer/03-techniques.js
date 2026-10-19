@@ -148,7 +148,8 @@
             cells: cells.slice(),
             units: [u],
             eliminations: elims,
-            detail: { cage: c, sum: puz.list[c].sum, required: req, unit: u },
+            // left/empty 是给提示文案用的：原先只带 sum，文案取 d.left 就成了「还差 undefined」
+            detail: { cage: c, sum: puz.list[c].sum, left: r.left, empty: r.empty, required: req, unit: u },
           });
         }
       }

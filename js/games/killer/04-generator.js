@@ -23,11 +23,15 @@
    *   sizeLo / sizeHi —— 笼子切多大。笼子越大，「和」提供的信息越弱、组合越多，
    *                      结构上就越费劲；但太大又切不出唯一解（实测 5 格笼唯一解率 20%、
    *                      6 格笼直接是 0%），所以上限卡在 4。
-   *   minLevel / minStar —— 切完用技巧引擎实测，达不到就重切。
+   *   minLevel / minStar / maxStar —— 切完用技巧引擎实测，不在区间内就重切。
    *
-   * 实测数据（各档抽 10 道）：
-   *   1-2 → 3ms/道，全是 L1；1-3 → 2ms，L2；1-4 → 22ms，L3；
-   *   2-4 → 76ms，L3 但大笼子更多；2-4 要求必须试数 → 139ms，全是 L5。
+   * 区间必须两头都卡。只写 minStar 的话，「入门」也会冒出必须试数的题——
+   * 曾经五档全是 minLevel:1 / minStar:1，等于「切出唯一解就收」，档位标签形同虚设：
+   * 实测「简单」10 道里 6 道必须试数、平均 4.1 星，比「大师」的 3.3 星还难。
+   *
+   * 星级口径（见 techniques.rate）：解得出时 star = 需要的最高技巧等级（封顶 4），
+   * 瓶颈多再加一星；L1–L4 推不完、必须试数时 star = 5。所以：
+   *   入门 ≤2 星、简单 2–3 星、中等 3–4 星、困难 4 星、大师 5 星（必须试数）。
    */
   /**
    * roomy —— 种子是否优先挑「还有未分配邻居」的格子。
@@ -38,11 +42,22 @@
    * absorb —— 收编单格笼时允许并进的笼子最大到几格。设 1 等于不收。
    */
   const DIFFICULTY = {
-    easy:   { id: 'easy',   name: '入门', star: 1, sizeLo: 1, sizeHi: 2, absorb: 1, roomy: 0,   minLevel: 1, minStar: 1 },
-    medium: { id: 'medium', name: '简单', star: 2, sizeLo: 1, sizeHi: 3, absorb: 3, roomy: 0.5, minLevel: 1, minStar: 1 },
-    hard:   { id: 'hard',   name: '中等', star: 3, sizeLo: 1, sizeHi: 3, absorb: 3, roomy: 1,   minLevel: 1, minStar: 1 },
-    expert: { id: 'expert', name: '困难', star: 4, sizeLo: 2, sizeHi: 3, absorb: 3, roomy: 1,   minLevel: 1, minStar: 1 },
-    master: { id: 'master', name: '大师', star: 5, sizeLo: 2, sizeHi: 3, absorb: 4, roomy: 1,   minLevel: 1, minStar: 1 },
+    // absorb 0 = 不吸收单格笼：入门档要的就是一堆「白送一个数字」的格子。
+    // 实测 63 个笼子里 33~45 个是单格，星级稳定在 1，全程只靠裸单/隐单就能推完。
+    easy:   { id: 'easy',   name: '入门', star: 1, sizeLo: 1, sizeHi: 2, absorb: 0, roomy: 0,   minLevel: 1, minStar: 1, maxStar: 2 },
+    // 上界卡死在 2 星：容许 3 星的话八成局面都会滑到 3 星，和「中等」就分不出来了。
+    // 笼子上限**不能**跟着往下压到 2 格：竖着的 2 格笼占同一列两行，两个这样的笼子
+    // 凑成 2×2 交换时笼和与行列都不变（唯一矩形式多解），实测唯一解率从 83% 掉到 3%，
+    // 15 次尝试全废、直接抛「没能切出唯一解」。难度靠星级区间卡，不靠压笼子尺寸。
+    medium: { id: 'medium', name: '简单', star: 2, sizeLo: 1, sizeHi: 2, absorb: 1, roomy: 0.5, minLevel: 2, minStar: 2, maxStar: 2 },
+    hard:   { id: 'hard',   name: '中等', star: 3, sizeLo: 1, sizeHi: 3, absorb: 3, roomy: 1,   minLevel: 3, minStar: 3, maxStar: 4 },
+    // 困难优先要「正好 4 星」（必须动用 L4 技巧）。大笼子唯一解率只有 5%，预算内凑不齐，
+    // 所以过了六成预算就放宽到 5 星——宁可给一道要试数的，也不要兜底成 3 星，
+    // 3 星正是「中等」，档位会糊回去。
+    expert: { id: 'expert', name: '困难', star: 4, sizeLo: 2, sizeHi: 4, absorb: 3, roomy: 1,   minLevel: 3, minStar: 4, maxStar: 4, relaxMaxStar: 5, relaxAt: 0.75 },
+    // 大师 = 必须试数，而且 L1–L4 已经推到顶（level 4）——
+    // 只要求「必须试数」的话，一开局就卡在基础技巧上的残局也会混进来，那不算难，只是坏。
+    master: { id: 'master', name: '大师', star: 5, sizeLo: 2, sizeHi: 3, absorb: 4, roomy: 1,   minLevel: 4, minStar: 5, maxStar: 5 },
   };
   const DIFFICULTY_ORDER = ['easy', 'medium', 'hard', 'expert', 'master'];
 
@@ -134,7 +149,9 @@
         // absorb 是收编上限，通常比 sizeHi 宽一格：单格笼最常见的处境就是
         // 「邻居都满了」，卡死在这只会让它留在盘面上扎眼。
         // 但入门档故意收得紧——单格笼就是白送一个数字，正是入门题该有的样子。
-        if (list[t].cells.length > (cfg.absorb || cfg.sizeHi)) continue;
+        // absorb 显式写 0 表示「不吸收」——单格笼就是白送数字，是入门档唯一能压难度的杠杆。
+        // 用 `cfg.absorb || cfg.sizeHi` 的话 0 会被当成「没配」，静默退回 sizeHi。
+        if (list[t].cells.length > (cfg.absorb === undefined ? cfg.sizeHi : cfg.absorb)) continue;
         let clash = false;
         for (const x of list[t].cells) if (solution[x] === d) { clash = true; break; }
         if (!clash) opts.push(t);
@@ -168,9 +185,29 @@
    * 与其让玩家对着「正在出题」干等，不如到点就用目前最好的一道，
    * 并且把**实测出来的**难度如实报出去（rating 是量出来的，不是标签）。
    */
-  const TIME_BUDGET_MS = 1500;
+  // 卡了星级区间之后，达标率会明显下降（「困难」要正好 4 星，实测三分之一），
+  // 预算太短就会一直落到兜底上、档位又糊成一片。2500ms 是折中：
+  // 多数局面一两秒就成，最坏情况下玩家对着遮罩等两秒多，还能接受。
+  const TIME_BUDGET_MS = 2500;
 
   const randomSeed = () => Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+
+  /**
+   * 评级离目标档位有多远（0 = 正好达标）。兜底挑的就是这个距离最小的那道。
+   * 星级差一档记 100 分、等级差一级记 10 分——星级是玩家直接看到的标签，先保证它。
+   * 「偏难」比「偏简单」更糟：难度标签写着「简单」却要试数，比出一道稍简单的更伤人，
+   * 所以越过 maxStar 记 120 而不是 100，兜底时优先往简单那头偏。
+   * 评级没跑完（timedOut）的数字不可信，排在所有真实评级之后。
+   */
+  function distOf(rating, cfg, maxStar) {
+    if (rating.timedOut) return 1e9;
+    let d = 0;
+    if (rating.star < cfg.minStar) d += (cfg.minStar - rating.star) * 100;
+    const hi = maxStar === undefined ? cfg.maxStar : maxStar;
+    if (hi && rating.star > hi) d += (rating.star - hi) * 120;
+    if (rating.level < cfg.minLevel) d += (cfg.minLevel - rating.level) * 10;
+    return d;
+  }
 
   /**
    * 一轮尝试：在给定笼子范围里切，直到切出一道达标的题。
@@ -178,8 +215,13 @@
    */
   function attempt(cfg, range, seed, hardDeadline) {
     const rng = U.makeRng(seed);
-    const deadline = Date.now() + TIME_BUDGET_MS;
+    // 个别档位（困难）达标率天然低，允许它多试一会儿；其余用统一预算
+    const budget = cfg.budget || TIME_BUDGET_MS;
+    const deadline = Date.now() + budget;
+    // 放宽线：到了这个点还没找到「理想星级」，就退而接受次一档（见 expert 的 relaxMaxStar）
+    const relaxAt = deadline - budget * (1 - (cfg.relaxAt || 0.6));
     let fallback = null;
+    let fallbackDist = Infinity;
     let attempts = 0;
     let hit = false;
 
@@ -201,18 +243,19 @@
       if (!KS.hasUnique(puz).unique) continue;
 
       const rating = KT.rate(puz);
-      // 评级没跑完的题不当正式候选（半截数据会把难度阶梯带偏），
-      // 但留着当兜底——否则一个都没评完时会直接抛错，玩家看到的是「出题失败」。
-      if (!fallback || (!rating.timedOut && rating.score > fallback.rating.score)) {
+      // 兜底不能按 score 挑。score 偏向「更难」，于是没达标的档位会拿全盘最难的那道当兜底——
+      // 「简单」档就是这么出过一批必须试数的题。兜底要挑离目标区间最近的那道。
+      // 评级没跑完的题不当正式候选（半截数据会把难度阶梯带偏），但留着当兜底，
+      // 否则一个都没评完时会直接抛错，玩家看到的是「出题失败」。
+      const maxStar = cfg.relaxMaxStar && Date.now() > relaxAt ? cfg.relaxMaxStar : cfg.maxStar;
+      const dist = distOf(rating, cfg, maxStar);
+      if (!fallback || dist < fallbackDist || (dist === fallbackDist && rating.score > fallback.rating.score)) {
         fallback = { puzzle: puz, solution: solution, rating: rating };
+        fallbackDist = dist;
       }
-      // 达标就收工：等级够、星级也在区间内。
-      // 这里不看 rating.solved ——「必须试数」的题在星级上已经是 5，该不该收由 minStar / maxStar 管。
-      // maxStar 是给中低档用的：那些档位不该冒出「必须试数」的题（星级 5），
-      // 靠 minStar 表达不了「要 3 星但不要 5 星」。
-      if (!rating.timedOut && rating.level >= cfg.minLevel && rating.star >= cfg.minStar &&
-          (!cfg.maxStar || rating.star <= cfg.maxStar)) {
-        fallback = { puzzle: puz, solution: solution, rating: rating };
+      // 达标就收工：等级够、星级落在 [minStar, maxStar] 里。
+      // 这里不看 rating.solved ——「必须试数」的题星级已经是 5，该不该收由 minStar / maxStar 管。
+      if (dist === 0) {
         hit = true;
         break;
       }
@@ -251,7 +294,7 @@
     const base = seed === undefined || seed === null ? randomSeed() : String(seed);
     // 整轮出题的硬上限：收窄到 2 格笼时唯一解率 85%，几乎必成，
     // 所以正常情况下走不到这个上限；留它是为了防止任何没预料到的组合把页面冻住。
-    const hardDeadline = Date.now() + 4000;
+    const hardDeadline = Date.now() + 5000;
     for (let hi = cfg.sizeHi; hi >= 2; hi--) {
       if (Date.now() > hardDeadline) break;
       const range = {

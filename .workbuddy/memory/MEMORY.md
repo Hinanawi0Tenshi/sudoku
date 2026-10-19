@@ -243,6 +243,33 @@
     （cage-trial 就依赖前面累积的消除）。出题逻辑改了要重跑生成脚本，单测会验数据是否过期。
   - 踩过的坑：脚本按数字前缀加载，`04-generator` 依赖 `03-techniques`。
     顺序写反时 Node 测试（手动列文件）能过、浏览器里却 `Cannot read properties of undefined`。
+  - **五档难度曾经完全同分布**：`minLevel` / `minStar` 全填 1，等于「切出唯一解就收」。
+    实测「简单」10 道里 6 道必须试数，比「大师」还难——而所有功能测试全绿，
+    这种退化只有统计看得见。现在每档卡星级区间：入门 ≤2、简单 =2、中等 =3、困难 =4、大师 =5，
+    `tests/difficulty-audit.js` 抽 N 道打直方图，`--assert` 断言每档 ≥80% 落在区间内
+    **且五档均值单调递增**（只查单档区间抓不到「简单比大师难」这种整体反序）。
+  - **困难档要「放宽」不能「卡死」**：大笼子唯一解率只有 5%，预算内凑不齐 4 星；
+    卡死 4 星就会兜底成 3 星（正好是「中等」），档位又糊回去。改成用掉 75% 预算后接受 5 星
+    （`relaxMaxStar` / `relaxAt`）：均值 4.1，只有 20% 掉回 3 星。
+  - **简单档上界必须卡在 2 星**：放开到 3 星的话八成局面滑到 3 星，和中等分不出来。
+  - 审计脚本的上界要用 `cfg.relaxMaxStar || cfg.maxStar`，否则「故意放宽」会被判不合格。
+  - 出题耗时（各档 10 局均值）：入门 4ms、简单 4ms、中等 670ms、困难 2.1s、大师 1.8s。
+    困难/大师这两档明显变慢是代价，不是回归——它们本来就要反复切笼子试唯一解。
+  - **提示文案里的 undefined 是拼字符串拼出来的**：文案取 `step.detail` 的字段，字段名写错
+    不会抛异常，只会漏出「笼子 R5C3、R6C3 还差 undefined，组合只有那么几种」。
+    实际踩过：笼内必含的文案取 `d.left`，而该技巧的 detail 只带了 `sum`。
+    `tests/killer-test.js` 第 7 节现在会把五档整局的每一条提示文案扫一遍找 undefined / NaN。
+
+## 无头浏览器测试的两个坑（会假装「挂死」）
+
+- **页面里的定时器会被节流**：整轮冒烟跑五六分钟，一旦被判成后台页，`setTimeout` 被拉到一分钟一次，
+  凡是「在页面里 `await new Promise(r => setTimeout(...))`」的用例都会超时报废（实测 120s 求值超时），
+  而同一段流程在刚打开的页面上 2.6 秒就跑完。
+  两条修法一起上：启动参数加 `--disable-background-timer-throttling` /
+  `--disable-renderer-backgrounding` / `--disable-backgrounding-occluded-windows`；
+  需要等条件成立时一律用 Node 侧轮询 `waitFor(expr, ms, label)`，不要写页面内的等待循环。
+- **视图切换是同步的**：`enter()` / `leave()` / `showView()` / 点按钮都立即生效，
+  测试里不需要补定时器；补了反而把自己送进上一条坑里。
 
 ## 沙箱环境限制
 - **看沙箱模式**：`danger-full-access` 下 headless Edge 跑得动，`browser-test.js` / `ocr-test.js` /
