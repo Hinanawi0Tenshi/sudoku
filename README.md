@@ -587,7 +587,7 @@ node tests/ocr-test.js
 # 5. 扫雷核心与求解器（30 项，纯 Node）
 node tests/mines-test.js
 
-# 6. 杀手数独核心与技巧引擎（28 项，纯 Node）
+# 6. 杀手数独核心与技巧引擎（29 项，纯 Node）
 node tests/killer-test.js
 
 # 7. 数字华容道核心、A* 与提示（39 项，纯 Node）
@@ -727,7 +727,7 @@ wasm 和语言包，还要额外写 worker。现在换成自己的一套：动�
 ```powershell
 node tests/run-core-tests.js   # 数独核心逻辑 125 项断言，纯 Node
 node tests/mines-test.js       # 扫雷核心与求解器 30 项，纯 Node
-node tests/killer-test.js      # 杀手数独核心与技巧引擎 28 项，纯 Node
+node tests/killer-test.js      # 杀手数独核心与技巧引擎 29 项，纯 Node
 node tests/slide-test.js       # 数字华容道模型与求解器 39 项，纯 Node
 node tests/g2048-test.js       # 2048 核心与期望最大化求解器 31 项，纯 Node
 node tests/klotski-test.js     # 华容道模型、全状态求解器与出题 31 项，纯 Node
